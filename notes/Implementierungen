@@ -1,0 +1,3 @@
+triSYCL: Kann nicht nativ auf GPUs zugreifen, nur über OpenCL, experimentell
+sycl-gtx: unvollständige Implementierung von SYCL 1.2, Einmannprojekt, kann NVIDIA?
+ComputeCPP: Beta-Status, experimentelle NVIDIA-Unterstützung
