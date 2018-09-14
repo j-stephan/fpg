@@ -1,0 +1,18 @@
+TODO:
+    Reduction mit ROCm Device Libraries benchmarken
+    SYCL, HIP, CUDA: Reduction
+    
+    
+    alle Plattformen: n-body O(n^2)
+
+    alle Plattformen: asynchrones Compute
+        * pinned memory
+        * DMA
+        * Copy/Compute overlap
+        * HyperQ
+        * queues
+
+    alle Plattformen: Unified Memory / Page Migration Engine
+
+DONE:
+
