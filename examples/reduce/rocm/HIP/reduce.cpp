@@ -42,7 +42,11 @@
 __inline__ __device__ auto warp_reduce_sum(int val)
 {
     for(auto offset = warpSize / 2; offset > 0; offset /= 2)
+#ifdef __NVCC__
         val += __shfl_down_sync(0xffffffff, val, offset);
+#else
+        val += __shfl_down(val, offset);
+#endif
     return val;
 }
 
