@@ -25,14 +25,12 @@
 #include <string>
 #include <vector>
 
-#include <hip/hip_runtime.h>
-
 #define CHECK(cmd) \
 { \
     auto error = cmd; \
-    if(error != hipSuccess) \
+    if(error != cudaSuccess) \
     { \
-        std::cerr << "Error: '" << hipGetErrorString(error) \
+        std::cerr << "Error: '" << cudaGetErrorString(error) \
                   << "' (" << error << ") at " << __FILE__ << ":" << __LINE__ \
                   << std::endl; \
         std::exit(EXIT_FAILURE); \
@@ -48,12 +46,8 @@ __inline__ __device__ auto warp_reduce_sum(int val)
 
 __inline__ __device__ auto block_reduce_sum(int val)
 {
-// this is really dumb - CUDA's builtin warpSize is not constexpr
-#ifdef __NVCC__
+    // this is really dumb - CUDA's builtin warpSize is not constexpr
     constexpr auto warp_size = 32;
-#else
-    constexpr auto warp_size = warpSize;
-#endif
     constexpr auto shared_size = 1024 / warp_size;
     // shared memory for 16 / 32 partial sums
     static __shared__ int shared[shared_size];
@@ -104,10 +98,8 @@ __global__ void device_reduce_stable(const int* data, int* result, int dim)
 auto reduce_stable(const int* data, int* result, int dim, int blocks,
                    int threads)
 {
-    hipLaunchKernelGGL((device_reduce_stable), dim3(blocks), dim3(threads),
-                        0, 0, data, result, dim);
-    hipLaunchKernelGGL((device_reduce_stable), dim3(1), dim3(1024),
-                        0, 0, result, result, blocks);
+    device_reduce_stable<<<blocks, threads>>>(data, result, dim);
+    device_reduce_stable<<<1, 1024>>>(result, result, blocks);
 }
 
 // =============================================================================
@@ -137,10 +129,8 @@ auto reduce_stable_vec2(const int* data, int* result, int dim, int blocks,
 {
     blocks = std::min(((dim / 2) + threads - 1) / threads, 1024);
 
-    hipLaunchKernelGGL((device_reduce_stable_vec2), dim3(blocks), dim3(threads),
-                        0, 0, data, result, dim);
-    hipLaunchKernelGGL((device_reduce_stable), dim3(1), dim3(1024),
-                        0, 0, result, result, blocks);
+    device_reduce_stable_vec2<<<blocks, threads>>>(data, result, dim);
+    device_reduce_stable<<<1, 1024>>>(result, result, blocks);
 }
 
 // =============================================================================
@@ -170,10 +160,8 @@ auto reduce_stable_vec4(const int* data, int* result, int dim, int blocks,
 {
     blocks = std::min(((dim / 4) + threads - 1) / threads, 1024);
 
-    hipLaunchKernelGGL((device_reduce_stable_vec4), dim3(blocks), dim3(threads),
-                        0, 0, data, result, dim);
-    hipLaunchKernelGGL((device_reduce_stable), dim3(1), dim3(1024),
-                        0, 0, result, result, blocks);
+    device_reduce_stable_vec4<<<blocks, threads>>>(data, result, dim);
+    device_reduce_stable<<<1, 1024>>>(result, result, blocks);
 }
 
 // =============================================================================
@@ -204,9 +192,8 @@ inline auto reduce_warp_atomic(const int* data, int* result, int dim,
     threads = 256;
     blocks = std::min((dim + threads - 1) / threads, 2048);
 
-    CHECK(hipMemsetAsync(result, 0, sizeof(int)));
-    hipLaunchKernelGGL((device_reduce_warp_atomic), dim3(blocks), dim3(threads),
-                        0, 0, data, result, dim);
+    CHECK(cudaMemsetAsync(result, 0, sizeof(int)));
+    device_reduce_warp_atomic<<<blocks, threads>>>(data, result, dim);
 }
 
 // ============================================================================
@@ -238,9 +225,8 @@ inline auto reduce_warp_atomic_vec2(const int* data, int* result, int dim,
     threads = 256;
     blocks = std::min(((dim / 2) + threads - 1) / threads, 2048);
 
-    CHECK(hipMemsetAsync(result, 0, sizeof(int)));
-    hipLaunchKernelGGL((device_reduce_warp_atomic_vec2), dim3(blocks),
-                        dim3(threads), 0, 0, data, result, dim);
+    CHECK(cudaMemsetAsync(result, 0, sizeof(int)));
+    device_reduce_warp_atomic_vec2<<<blocks, threads>>>(data, result, dim);
 }
 
 // ============================================================================
@@ -272,9 +258,8 @@ inline auto reduce_warp_atomic_vec4(const int* data, int* result, int dim,
     threads = 256;
     blocks = std::min(((dim / 4) + threads - 1) / threads, 2048);
 
-    CHECK(hipMemsetAsync(result, 0, sizeof(int)));
-    hipLaunchKernelGGL((device_reduce_warp_atomic_vec4), dim3(blocks),
-                        dim3(threads), 0, 0, data, result, dim);
+    CHECK(cudaMemsetAsync(result, 0, sizeof(int)));
+    device_reduce_warp_atomic_vec4<<<blocks, threads>>>(data, result, dim);
 }
 
 // ============================================================================
@@ -304,9 +289,8 @@ inline auto reduce_block_atomic(const int* data, int* result, int dim,
     threads = 256;
     blocks = std::min((dim + threads - 1) / threads, 2048);
 
-    CHECK(hipMemsetAsync(result, 0, sizeof(int)));
-    hipLaunchKernelGGL((device_reduce_block_atomic), dim3(blocks),
-                        dim3(threads), 0, 0, data, result, dim);
+    CHECK(cudaMemsetAsync(result, 0, sizeof(int)));
+    device_reduce_block_atomic<<<blocks, threads>>>(data, result, dim);
 }
 
 // ============================================================================
@@ -338,9 +322,8 @@ inline auto reduce_block_atomic_vec2(const int* data, int* result, int dim,
     threads = 256;
     blocks = std::min(((dim / 2) + threads - 1) / threads, 2048);
 
-    CHECK(hipMemsetAsync(result, 0, sizeof(int)));
-    hipLaunchKernelGGL((device_reduce_block_atomic_vec2), dim3(blocks),
-                        dim3(threads), 0, 0, data, result, dim);
+    CHECK(cudaMemsetAsync(result, 0, sizeof(int)));
+    device_reduce_block_atomic_vec2<<<blocks, threads>>>(data, result, dim);
 }
 
 // ============================================================================
@@ -372,9 +355,8 @@ inline auto reduce_block_atomic_vec4(const int* data, int* result, int dim,
     threads = 256;
     blocks = std::min(((dim / 4) + threads - 1) / threads, 2048);
 
-    CHECK(hipMemsetAsync(result, 0, sizeof(int)));
-    hipLaunchKernelGGL((device_reduce_block_atomic_vec4), dim3(blocks),
-                        dim3(threads), 0, 0, data, result, dim);
+    CHECK(cudaMemsetAsync(result, 0, sizeof(int)));
+    device_reduce_block_atomic_vec4<<<blocks, threads>>>(data, result, dim);
 }
 // ============================================================================
 // Host
@@ -410,17 +392,17 @@ auto do_reduce(const std::string& label, Func f)
     constexpr auto data_bytes = array_dim * sizeof(int);
     constexpr auto result_bytes = blocks * sizeof(int);
 
-    CHECK(hipMalloc(&data_gpu, data_bytes));
-    CHECK(hipMalloc(&result_gpu, result_bytes));
+    CHECK(cudaMalloc(&data_gpu, data_bytes));
+    CHECK(cudaMalloc(&result_gpu, result_bytes));
 
-    CHECK(hipMemcpy(data_gpu, data.data(),
-                     data_bytes, hipMemcpyHostToDevice));
-    CHECK(hipMemcpy(result_gpu, result.data(),
-                     result_bytes, hipMemcpyHostToDevice));
+    CHECK(cudaMemcpy(data_gpu, data.data(),
+                     data_bytes, cudaMemcpyHostToDevice));
+    CHECK(cudaMemcpy(result_gpu, result.data(),
+                     result_bytes, cudaMemcpyHostToDevice));
 
     // warm up
     f(data_gpu, result_gpu, array_dim, blocks, threads);
-    CHECK(hipDeviceSynchronize());
+    CHECK(cudaDeviceSynchronize());
 
     // reduce
     auto start = std::chrono::steady_clock::now();
@@ -428,12 +410,12 @@ auto do_reduce(const std::string& label, Func f)
     {
         f(data_gpu, result_gpu, array_dim, blocks, threads);
     }
-    CHECK(hipDeviceSynchronize());
+    CHECK(cudaDeviceSynchronize());
     auto stop = std::chrono::steady_clock::now();
     auto dur = std::chrono::duration<double>{stop - start};
 
-    CHECK(hipMemcpy(result.data(), result_gpu,
-                     result_bytes, hipMemcpyDeviceToHost));
+    CHECK(cudaMemcpy(result.data(), result_gpu,
+                     result_bytes, cudaMemcpyDeviceToHost));
 
     // verify
     auto verify = std::accumulate(std::begin(data), std::end(data), 0);
@@ -447,8 +429,8 @@ auto do_reduce(const std::string& label, Func f)
 
     std::cout << label << ";" << array_dim << ";" << bandwidth << std::endl;
 
-    CHECK(hipFree(result_gpu));
-    CHECK(hipFree(data_gpu));
+    CHECK(cudaFree(result_gpu));
+    CHECK(cudaFree(data_gpu));
 }
 
 auto main() -> int
