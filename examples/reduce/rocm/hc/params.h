@@ -5,6 +5,9 @@
  * license. See the LICENSE file for details.
  */
 
+#ifndef PARAMS_H
+#define PARAMS_H
+
 #include <cstddef>
 
 namespace benchmark
@@ -16,3 +19,5 @@ namespace benchmark
         unsigned int iterations;
     };
 }
+
+#endif

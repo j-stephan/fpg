@@ -13,6 +13,7 @@ auto main() -> int
 {
     try
     {
+        benchmark::init();
         benchmark::print_header();
         auto params = benchmark::create_params();
         auto result = benchmark::run(params);

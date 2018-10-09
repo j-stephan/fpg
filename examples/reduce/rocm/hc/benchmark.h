@@ -5,13 +5,19 @@
  * license. See the LICENSE file for details.
  */
 
+#ifndef BENCHMARK_H
+#define BENCHMARK_H
+
 #include "params.h"
 #include "result.h"
 
 namespace benchmark
 {
+    auto init() -> void;
     auto print_header() -> void;
     auto create_params() -> params;
-    auto run(params& p) -> result;
+    auto run(const params& p) -> result;
     auto print_result(const result& r) -> void;
 }
+
+#endif

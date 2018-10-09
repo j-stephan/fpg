@@ -5,6 +5,9 @@
  * license. See the LICENSE file for details.
  */
 
+#ifndef RESULT_H
+#define RESULT_H
+
 #include <string>
 #include <tuple>
 #include <vector>
@@ -30,3 +33,5 @@ namespace benchmark
                                >> tuples;
     };
 }
+
+#endif

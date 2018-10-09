@@ -5,16 +5,27 @@
  * license. See the LICENSE file for details.
  */
 
+#include <algorithm>
 #include <iomanip>
 #include <iostream>
+#include <iterator>
+#include <limits>
+#include <random>
 #include <tuple>
+#include <vector>
 
+#include "accelerator.h"
 #include "benchmark.h"
 #include "params.h"
 #include "result.h"
 
 namespace benchmark
 {
+    auto init() -> void
+    {
+        acc::init();
+    }
+
     auto print_header() -> void
     {
         std::cout << "index,"
@@ -41,7 +52,90 @@ namespace benchmark
 
     auto run(const params& p) -> result
     {
-        // call specific implementation from here
+        auto info = acc::get_info();
+
+        auto r = result{};
+
+        for(auto s = p.first_size; s <= p.last_size; s *= 2)
+        {
+            for(auto block_size = 64; block_size <= 1024; block_size *= 2)
+            {
+                auto blocks_i = info.num_sm;
+                auto blocks_n = ((((s + 1) / 2) - 1) / block_size) + 1;
+                auto i = 0;
+
+                // GRIDSIZE LOOP
+                do
+                {
+                    blocks_i *= 2; // starting with 2 * num_sm blocks per grid
+                    if(static_cast<unsigned>(blocks_i) > blocks_n)
+                        blocks_i = blocks_n;
+
+                    // create data
+                    auto data = std::vector<int>{};
+                    data.resize(s);
+
+                    // initialize data
+                    auto&& rd = std::random_device{};
+                    auto rng = std::mt19937{rd()};
+                    auto uid = std::uniform_int_distribution<>{0, 3};
+                    std::generate(std::begin(data), std::end(data), [&]()
+                                  {
+                                      return uid(rng);
+                                  });
+
+                    auto result = std::vector<int>{};
+                    auto result_size = blocks_i * p.iterations + blocks_i;
+                    result.resize(result_size); 
+                    std::fill(std::begin(result), std::end(result), 0);
+
+                    // copy to accelerator
+                    auto data_gpu = acc::make_array(data.size());
+                    auto result_gpu = acc::make_array(result.size());
+                    acc::copy_h2d(data, data_gpu);
+                    acc::copy_h2d(result, result_gpu);
+
+                    // warm up
+                    acc::do_benchmark(data_gpu, result_gpu, s, blocks_i,
+                                      block_size);
+
+                    // run benchmark
+                    auto min_time = std::numeric_limits<float>::max(); 
+                    for(auto j = 0u; j < p.iterations; ++j)
+                    {
+                        auto start = acc::start_clock();
+                        acc::do_benchmark(data_gpu, result_gpu, s, blocks_i,
+                                          block_size);
+                        auto stop = acc::stop_clock();
+                        auto dur = acc::get_duration(start, stop);
+                        min_time = std::min(min_time, dur);
+                    }
+
+                    // verify
+                    acc::copy_d2h(result_gpu, result);
+                    auto verify = std::accumulate(std::begin(data),
+                                                  std::end(data), 0);
+                    if(verify != result[0])
+                    {
+                        std::cerr << "Mismatch: expected " << verify
+                                  << ", got: " << result[0] << std::endl;
+                        std::exit(EXIT_FAILURE);
+                    }
+
+                    auto bytes = s * sizeof(int);
+                    // This is actually the bandwidth
+                    auto max_throughput = bytes * p.iterations / min_time;
+
+                    r.tuples.emplace_back(std::make_tuple(
+                        i++, info.id, info.name, info.cc_major, info.cc_minor,
+                        info.mem_clock, info.clock, s, info.num_sm, blocks_i,
+                        blocks_n, block_size, p.iterations, min_time,
+                        max_throughput));
+
+                } while(static_cast<unsigned>(blocks_i) < blocks_n);
+            }
+        }
+        return r;
     }
 
     auto print_result(const result& r) -> void
