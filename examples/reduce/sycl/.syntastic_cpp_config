@@ -1,1 +1,1 @@
--sycl -std=c++11
+-sycl -std=c++14

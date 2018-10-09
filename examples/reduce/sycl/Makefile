@@ -1,34 +1,22 @@
-SYCL_INCDIR=/opt/sycl/computecpp/include
-SYCL_LIBDIR=/opt/sycl/computecpp/lib
-CL_INCDIR=/opt/rocm/opencl/include
+CXX = compute++
+SYCL_INC = /home/jan/software/computecpp/include
+CXXFLAGS = -I$(SYCL_INC) -sycl-driver -sycl-target ptx64 -no-serial-memop \
+		   -O3 -std=c++14 -Wall -Wextra -pedantic
+LDFLAGS = -O3 -lComputeCpp -lOpenCL
 
-reduce-ptx: reduce-ptx.o
-	compute++ -sycl-driver -sycl-target ptx64 -O3 -std=c++17 -o reduce-ptx \
-		reduce-ptx.o -L${SYCL_LIBDIR} -lComputeCpp
+reduce: accelerator.o benchmark.o main.o
+	$(CXX) -o reduce accelerator.o benchmark.o main.o $(LDFLAGS)
 
-reduce-ptx.o:
-	compute++ -sycl-driver -sycl-target ptx64 -O3 -std=c++17 reduce.cpp -c \
-		-I${SYCL_INCDIR} -I${CL_INCDIR} -o reduce-ptx.o
+accelerator.o: accelerator.cpp accelerator.h
+	$(CXX) $(CXXFLAGS) accelerator.cpp -c
 
-reduce-spir: reduce-spir.o
-	compute++ -sycl-driver -sycl-target spir64 -O3 -std=c++17 -o reduce-spir \
-		reduce-spir.o -L${SYCL_LIBDIR} -lComputeCpp
+benchmark.o: benchmark.cpp benchmark.h
+	$(CXX) $(CXXFLAGS) benchmark.cpp -c
 
-reduce-spir.o:
-	compute++ -sycl-driver -sycl-target spir64 -O3 -std=c++17 reduce.cpp -c \
-		-I${SYCL_INCDIR} -I${CL_INCDIR} -o reduce-spir.o
-
-reduce-spirv: reduce-spirv.o
-	compute++ -sycl-driver -sycl-target spirv64 -O3 -std=c++17 -o reduce-spirv \
-		reduce-spirv.o -L${SYCL_LIBDIR} -lComputeCpp
-
-reduce-spirv.o:
-	compute++ -sycl-driver -sycl-target spirv64 -O3 -std=c++17 reduce.cpp -c \
-		-I${SYCL_INCDIR} -I${CL_INCDIR} -o reduce-spirv.o
+main.o: main.cpp
+	$(CXX) $(CXXFLAGS) main.cpp -c
 
 clean:
-	rm -f reduce-spir reduce-spir.o \
-	   	  reduce-ptx reduce-ptx.o \
-	   	  reduce-spirv reduce-spirv.o
+	rm -f reduce *.o
 
 .PHONY:
