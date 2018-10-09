@@ -124,7 +124,7 @@ namespace benchmark
 
                     auto bytes = s * sizeof(int);
                     // This is actually the bandwidth
-                    auto max_throughput = bytes * p.iterations / min_time;
+                    auto max_throughput = bytes / min_time * 1e-6;
 
                     r.tuples.emplace_back(std::make_tuple(
                         i++, info.id, info.name, info.cc_major, info.cc_minor,
@@ -177,7 +177,7 @@ namespace benchmark
                       << blocks_n << ","
                       << TBlockSize << ","
                       << TRuns << ","
-                      << min_time << ","
+                      << min_time << " ms,"
                       << max_throughput << " GB/s" << std::endl;
         }
     }
