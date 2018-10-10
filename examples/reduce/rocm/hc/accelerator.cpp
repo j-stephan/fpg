@@ -13,9 +13,9 @@
 #include <string>
 #include <vector>
 
+#pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #pragma GCC diagnostic ignored "-Wc++17-extensions"
-#pragma GCC diagnostic push
 #include <hc.hpp>
 #pragma GCC diagnostic pop
 
