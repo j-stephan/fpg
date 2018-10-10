@@ -1,9 +1,9 @@
 CXX = compute++
 SYCL_INC = /opt/sycl/computecpp/include
 CL_INC = /home/jstephan/software/cuda/include
-CXXFLAGS = -Og -g -std=c++14 -Wall -Wextra -pedantic
+CXXFLAGS = -O3 -std=c++14 -Wall -Wextra -pedantic
 SYCL_FLAGS = -I$(SYCL_INC) -I$(CL_INC) -sycl-driver -sycl-target ptx64 -no-serial-memop
-LDFLAGS = -Og -g -lComputeCpp -lOpenCL
+LDFLAGS = -O3 -lComputeCpp -lOpenCL
 
 reduce: accelerator.o benchmark.o main.o
 	$(CXX) -o reduce accelerator.o benchmark.o main.o $(LDFLAGS)

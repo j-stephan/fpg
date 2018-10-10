@@ -282,17 +282,17 @@ namespace acc
                     i += grid_size;
                 }
 
-                scratch[work_item.get_local_id().get(0)] = tsum;
+                scratch[work_item.get_local_id(0)] = tsum;
             });
 
             // implicit barrier
 
-            auto block_id = work_group.get_id().get(0);
+            auto block_id = work_group.get_id(0);
             work_group.parallel_for_work_item(
                 [&] (cl::sycl::h_item<1> work_item)
             {
-                auto block_size = work_item.get_local_range().get(0);
-                auto local_id = work_item.get_local_id().get(0);
+                auto block_size = work_item.get_local_range(0);
+                auto local_id = work_item.get_local_id(0);
                 // BLOCK + WARP, read from shared memory
                 #pragma unroll
                 for(auto bs = block_size, bsup = (block_size + 1) / 2;
@@ -317,7 +317,7 @@ namespace acc
                 [&] (cl::sycl::h_item<1> work_item)
             {
                 // store to global memory
-                if(work_item.get_local_id().get(0) == 0)
+                if(work_item.get_local_id(0) == 0)
                     result[block_id] = scratch[0];
             });
         }
@@ -354,7 +354,7 @@ namespace acc
                                             reducer);
             });
 
-            /*last_event_ = queue_.submit([&] (cl::sycl::handler& cgh)
+            last_event_ = queue_.submit([&] (cl::sycl::handler& cgh)
             {
                 // second loop
                 auto blocks_range = cl::sycl::range<1>{
@@ -376,7 +376,7 @@ namespace acc
                                             block_size};
                 cgh.parallel_for_work_group(blocks_range, block_size_range,
                                             reducer);
-            });*/
+            });
         }
         catch(const cl::sycl::exception& err)
         {
