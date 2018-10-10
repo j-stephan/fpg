@@ -1,6 +1,6 @@
 CXX = hipcc
-CXXFLAGS = `hcc-config --cxxflags` -O3 -std=c++14 -Wall -Wextra -pedantic
-LDFLAGS = `hcc-config --ldflags` -O3
+CXXFLAGS = -O3 -std=c++14 -Wall -Wextra -pedantic
+LDFLAGS = -O3
 
 reduce: accelerator.o benchmark.o main.o
 	$(CXX) -o reduce accelerator.o benchmark.o main.o $(LDFLAGS)
