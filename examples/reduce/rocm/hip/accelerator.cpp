@@ -242,3 +242,5 @@ namespace acc
         return ms;
     }
 }
+
+// vim:ft=hip
