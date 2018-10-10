@@ -14,8 +14,8 @@
 #include <string>
 #include <vector>
 
-#pragma clang diagnostic ignored "-Wunused-parameter"
 #pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-parameter"
 #include <CL/sycl.hpp>
 #pragma clang diagnostic pop
 
@@ -30,7 +30,7 @@ namespace acc
     {
         auto ctx_ = cl::sycl::context{};
         auto acc_ = cl::sycl::device{};
-        auto queue_ = cl::sycl::queue{};
+        auto&& queue_ = cl::sycl::queue{};
         auto first_event_ = cl::sycl::event{};
         auto last_event_ = cl::sycl::event{};
     }
