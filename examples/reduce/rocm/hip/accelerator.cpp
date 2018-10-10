@@ -48,6 +48,12 @@ namespace acc
     {
         int* ptr;
         std::size_t size;
+
+        ~dev_ptr_impl()
+        {
+            if(ptr != nullptr)
+                CHECK(hipFree(ptr));
+        }
     };
 
     dev_ptr::~dev_ptr()
@@ -83,7 +89,7 @@ namespace acc
         }
 
         std::cout << std::endl;
-        std::cout << "Select accelerator: " << std::endl;
+        std::cout << "Select accelerator: ";
         auto index = 0;
         std::cin >> index;
 
@@ -103,19 +109,24 @@ namespace acc
     auto get_info() -> info
     {
         auto id = int{};
-        auto name = std::string{};
-        auto cc_major = 0;
-        auto cc_minor = 0;
-        auto mem_clock = 0;
-        auto clock = 0;
-        auto num_sm = 0;
+        CHECK(hipGetDevice(&id));
+
+        auto prop = hipDeviceProp_t{};
+        CHECK(hipGetDeviceProperties(&prop, id));
+
+        auto name = std::string{prop.name};
+        auto cc_major = prop.major;
+        auto cc_minor = prop.minor;
+        auto mem_clock = prop.memoryClockRate / 1000;
+        auto clock = prop.clockRate / 1000;
+        auto num_sm = prop.multiProcessorCount;
         return info{id, name, cc_major, cc_minor, mem_clock, clock, num_sm};
     }
 
     auto make_array(std::size_t size) -> dev_ptr
     {
         auto d_ptr = new dev_ptr_impl{nullptr, size};
-        CHECK(hipMalloc(&d_ptr->ptr, size * sizeof(int)));
+        CHECK(hipMalloc(&(d_ptr->ptr), size * sizeof(int)));
         return dev_ptr{d_ptr};
     }
 
@@ -162,7 +173,7 @@ namespace acc
             i += grid_size;
         }
 
-        scratch[i] = tsum;
+        scratch[hipThreadIdx_x] = tsum;
         __syncthreads();
 
 
@@ -172,20 +183,20 @@ namespace acc
             bs > 1;
             bs /= 2, bsup = (bs + 1) / 2)
         {
-            auto cond = i < bsup // first half of block
-                        && (i + bsup) < hipBlockDim_x
-                        && static_cast<unsigned>(i * hipBlockDim_x + i + bsup)
-                           < size;
+            auto cond = hipThreadIdx_x < bsup // first half of block
+                        && (hipThreadIdx_x + bsup) < hipBlockDim_x
+                        && (hipBlockIdx_x * hipBlockDim_x +
+                            hipThreadIdx_x + bsup) < size;
 
             if(cond)
             {
-                scratch[i] += scratch[i + bsup];
+                scratch[hipThreadIdx_x] += scratch[hipThreadIdx_x + bsup];
             }
             __syncthreads();
 
             // store to global memory
-            if(i == 0)
-                result[i] = scratch[0];
+            if(hipThreadIdx_x == 0)
+                result[hipBlockIdx_x] = scratch[0];
         }
     }
 
@@ -208,6 +219,7 @@ namespace acc
     {
         auto clock_impl = new dev_clock_impl{};
         CHECK(hipDeviceSynchronize());
+        CHECK(hipEventCreate(&(clock_impl->event)));
         CHECK(hipEventRecord(clock_impl->event, hstream_));
         return dev_clock{clock_impl};
     }
@@ -215,6 +227,7 @@ namespace acc
     auto stop_clock() -> dev_clock
     {
         auto clock_impl = new dev_clock_impl{};
+        CHECK(hipEventCreate(&(clock_impl->event)));
         CHECK(hipEventRecord(clock_impl->event, hstream_));
         CHECK(hipEventSynchronize(clock_impl->event));
         return dev_clock{clock_impl};
