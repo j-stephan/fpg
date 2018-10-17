@@ -244,82 +244,66 @@ namespace acc
         cl::sycl::accessor<int, 1,
                            cl::sycl::access::mode::write,
                            cl::sycl::access::target::global_buffer> result;
+        cl::sycl::accessor<int, 1,
+                           cl::sycl::access::mode::read_write,
+                           cl::sycl::access::target::local> scratch;
 
         std::size_t size;
-        int blocks;
-        int block_size;
 
-        auto operator()(cl::sycl::group<1> work_group) -> void
+        auto operator()(cl::sycl::nd_item<1> item) -> void
         {
-            // shared memory is defined per work_group
-            int scratch[1024];
+            auto i = item.get_global_id(0);
+            if(i > size)
+                return;
 
-            work_group.parallel_for_work_item(
-                [&] (cl::sycl::h_item<1> work_item)
+            // avoid neutral element
+            auto tsum = data[i];
+
+            auto grid_size = item.get_global_range(0);
+            i += grid_size;
+
+            // GRID, read from global memory
+            while((i + 3 * grid_size) < size)
             {
-                auto i = work_item.get_global_id().get(0);
-                if(i > size)
-                    return;
+                tsum += data[i] + data[i + grid_size] +
+                        data[i + 2 * grid_size] + data[i + 3 * grid_size];
+                i += 4 * grid_size;
+            }
 
-                // avoid neutral element
-                auto tsum = data[i];
-
-                auto grid_size = work_item.get_global_range().get(0);
+            // tail
+            while(i < size)
+            {
+                tsum += data[i];
                 i += grid_size;
+            }
 
-                // GRID, read from global memory
-                while((i + 3 * grid_size) < size)
-                {
-                    tsum += data[i] + data[i + grid_size] +
-                            data[i + 2 * grid_size] + data[i + 3 * grid_size];
-                    i += 4 * grid_size;
-                }
+            scratch[item.get_local_id(0)] = tsum;
+            item.barrier();
 
-                // tail
-                while(i < size)
-                {
-                    tsum += data[i];
-                    i += grid_size;
-                }
+            auto block_id = item.get_group(0);
+            auto block_size = item.get_group_range(0);
+            auto local_id = item.get_local_id(0);
 
-                scratch[work_item.get_local_id(0)] = tsum;
-            });
-
-            // implicit barrier
-
-            auto block_id = work_group.get_id(0);
-            work_group.parallel_for_work_item(
-                [&] (cl::sycl::h_item<1> work_item)
+            // BLOCK + WARP, read from shared memory
+            #pragma unroll
+            for(auto bs = block_size, bsup = (block_size + 1) / 2;
+                bs > 1;
+                bs /= 2, bsup = (bs + 1) / 2)
             {
-                auto block_size = work_item.get_local_range(0);
-                auto local_id = work_item.get_local_id(0);
-                // BLOCK + WARP, read from shared memory
-                #pragma unroll
-                for(auto bs = block_size, bsup = (block_size + 1) / 2;
-                    bs > 1;
-                    bs /= 2, bsup = (bs + 1) / 2)
+                auto cond = local_id < bsup &&
+                            (local_id + bsup) < block_size &&
+                            (block_id * block_size + local_id + bsup) < size;
+                if(cond)
                 {
-                    auto cond = local_id < bsup &&
-                                (local_id + bsup) < block_size &&
-                                (block_id * block_size + local_id + bsup)
-                                    < size;
-                    if(cond)
-                    {
-                        scratch[local_id] += scratch[local_id + bsup];
-                    }
-                                
-                }
-            });
+                    scratch[local_id] += scratch[local_id + bsup];
+                }                          
+            }
 
-            // implicit barrier
+            item.barrier();
 
-            work_group.parallel_for_work_item(
-                [&] (cl::sycl::h_item<1> work_item)
-            {
-                // store to global memory
-                if(work_item.get_local_id(0) == 0)
-                    result[block_id] = scratch[0];
-            });
+            // store to global memory
+            if(item.get_local_id(0) == 0)
+                result[block_id] = scratch[0];
         }
     };
 
@@ -347,11 +331,17 @@ namespace acc
                                         cl::sycl::access::mode::write,
                                         cl::sycl::access::target::global_buffer>
                                         (cgh);
+                auto scratch_acc = cl::sycl::accessor<
+                                        std::int32_t, 1,
+                                        cl::sycl::access::mode::read_write,
+                                        cl::sycl::access::target::local>
+                                        {cl::sycl::range<1>{1024}, cgh};
 
-                auto reducer = block_reduce{data_acc, result_acc, size, blocks,
-                                            block_size};
-                cgh.parallel_for_work_group(blocks_range, block_size_range,
-                                            reducer);
+                auto reducer = block_reduce{data_acc, result_acc, scratch_acc,
+                                            size};
+                cgh.parallel_for(cl::sycl::nd_range<1>{
+                                 blocks_range * block_size_range,
+                                 block_size_range}, reducer);
             });
 
             last_event_ = queue_.submit([&] (cl::sycl::handler& cgh)
@@ -370,12 +360,17 @@ namespace acc
                                     cl::sycl::access::mode::write,
                                     cl::sycl::access::target::global_buffer>
                                     (cgh);
+                auto scratch_acc = cl::sycl::accessor<
+                                        std::int32_t, 1,
+                                        cl::sycl::access::mode::read_write,
+                                        cl::sycl::access::target::local>
+                                        {cl::sycl::range<1>{1024}, cgh};
 
-                auto reducer = block_reduce{data_acc, result_acc,
-                                            static_cast<std::size_t>(blocks), 1,
-                                            block_size};
-                cgh.parallel_for_work_group(blocks_range, block_size_range,
-                                            reducer);
+                auto reducer = block_reduce{data_acc, result_acc, scratch_acc,
+                                            static_cast<std::size_t>(blocks)};
+                cgh.parallel_for(cl::sycl::nd_range<1>{
+                                 blocks_range * block_size_range,
+                                 block_size_range}, reducer);
             });
         }
         catch(const cl::sycl::exception& err)
