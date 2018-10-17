@@ -21,6 +21,7 @@
 #pragma clang diagnostic ignored "-Wsign-compare"
 #pragma clang diagnostic ignored "-Wunused-parameter"
 #include <hip/hip_runtime.h>
+#include <hip/hip_runtime_api.h>
 #pragma clang diagnostic pop
 
 #include "accelerator.h"
@@ -204,15 +205,11 @@ namespace acc
                       int blocks, int block_size) -> void
     {
         hipLaunchKernelGGL(block_reduce,
-                           dim3{static_cast<std::uint32_t>(blocks), 1u, 1u},
-                           dim3{static_cast<std::uint32_t>(block_size), 1u, 1u},
-                           0, hstream_, data.p_impl->ptr, result.p_impl->ptr,
-                           size);
+                           dim3(blocks), dim3(block_size), 0, hstream_,
+                           data.p_impl->ptr, result.p_impl->ptr, size);
         hipLaunchKernelGGL(block_reduce,
-                           dim3{1u, 1u, 1u},
-                           dim3{static_cast<std::uint32_t>(block_size), 1u, 1u},
-                           0, hstream_, result.p_impl->ptr, result.p_impl->ptr,
-                           blocks);
+                           dim3(1), dim3(block_size), 0, hstream_,
+                           result.p_impl->ptr, result.p_impl->ptr, blocks);
     }
 
     auto start_clock() -> dev_clock
