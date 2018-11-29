@@ -5,15 +5,9 @@
  * license. See the LICENSE file for details.
  */
 
-#include <cstdint>
-#include <cstdlib>
-#include <cwchar>
 #include <iostream>
-#include <locale>
-#include <string>
-#include <vector>
 
-#include "accelerator.h"
+#include "common/common.h"
 
 #define CHECK(cmd) \
 { \
@@ -27,16 +21,27 @@
                 } \
 }
 
-namespace acc
+namespace common
 {
-    namespace
+    struct dev_handle_impl
     {
-        auto cstream_ = cudaStream_t{};
+        cudaStream_t stream;
+
+        ~dev_handle_impl()
+        {
+            CHECK(cudaStreamDestroy(stream));
+        }
+    };
+
+    dev_handle::~dev_handle()
+    {
+        if(p_impl != nullptr)
+            delete p_impl;
     }
 
     struct dev_ptr_impl
     {
-        int* ptr;
+        void* ptr;
         std::size_t size;
 
         ~dev_ptr_impl()
@@ -63,7 +68,7 @@ namespace acc
             delete p_impl;
     }
 
-    auto init() -> void
+    auto init() -> dev_handle
     {
         // set up default device
         auto dev_count = int{};
@@ -93,7 +98,9 @@ namespace acc
         CHECK(cudaSetDevice(index));
         CHECK(cudaFree(nullptr)); // force context init
 
-        CHECK(cudaStreamCreate(&cstream_));
+        auto stream = cudaStream_t{};
+        CHECK(cudaStreamCreate(&stream));
+        return dev_handle{new dev_handle_impl{stream}};
     }
 
     auto get_info() -> info
@@ -133,89 +140,20 @@ namespace acc
                         cudaMemcpyDeviceToHost));
     }
 
-    __global__ void block_reduce(const int* data, int* result, std::size_t size)
-    {
-        __shared__ int scratch[1024]; 
-
-        auto i = blockIdx.x * blockDim.x + threadIdx.x;
-
-        if(i >= size)
-            return;
-
-        // avoid neutral element
-        auto tsum = data[i];
-
-        auto grid_size = gridDim.x * blockDim.x;
-        i += grid_size;
-
-        // GRID, read from global memory
-        while((i + 3 * grid_size) < size)
-        {
-            tsum += data[i] + data[i + grid_size] + data[i + 2 * grid_size] +
-                    data[i + 3 * grid_size];
-            i += 4 * grid_size;
-        }
-
-        // tail
-        while(i < size)
-        {
-            tsum += data[i];
-            i += grid_size;
-        }
-
-        scratch[threadIdx.x] = tsum;
-        __syncthreads();
-
-
-        // BLOCK + WARP, read from shared memory
-        #pragma unroll
-        for(auto bs = blockDim.x, bsup = (blockDim.x + 1) / 2;
-            bs > 1;
-            bs /= 2, bsup = (bs + 1) / 2)
-        {
-            auto cond = threadIdx.x < bsup // first half of block
-                        && (threadIdx.x + bsup) < blockDim.x
-                        && (blockIdx.x * blockDim.x +
-                            threadIdx.x + bsup) < size;
-
-            if(cond)
-            {
-                scratch[threadIdx.x] += scratch[threadIdx.x + bsup];
-            }
-            __syncthreads();
-
-            // store to global memory
-            if(threadIdx.x == 0)
-                result[blockIdx.x] = scratch[0];
-        }
-    }
-
-    auto do_benchmark(const dev_ptr& data, dev_ptr& result, std::size_t size,
-                      int blocks, int block_size) -> void
-    {
-        block_reduce<<<blocks, block_size, 0, cstream_>>>(data.p_impl->ptr,
-                                                          result.p_impl->ptr,
-                                                          size);
-        
-        block_reduce<<<1, block_size, 0, cstream_>>>(result.p_impl->ptr,
-                                                     result.p_impl->ptr,
-                                                     blocks);
-    }
-
-    auto start_clock() -> dev_clock
+    auto start_clock(dev_handle& handle) -> dev_clock
     {
         auto clock_impl = new dev_clock_impl{};
         CHECK(cudaDeviceSynchronize());
         CHECK(cudaEventCreate(&(clock_impl->event)));
-        CHECK(cudaEventRecord(clock_impl->event, cstream_));
+        CHECK(cudaEventRecord(clock_impl->event, handle.p_impl->stream));
         return dev_clock{clock_impl};
     }
 
-    auto stop_clock() -> dev_clock
+    auto stop_clock(dev_handle& handle) -> dev_clock
     {
         auto clock_impl = new dev_clock_impl{};
         CHECK(cudaEventCreate(&(clock_impl->event)));
-        CHECK(cudaEventRecord(clock_impl->event, cstream_));
+        CHECK(cudaEventRecord(clock_impl->event, handle.p_impl->stream));
         CHECK(cudaEventSynchronize(clock_impl->event));
         return dev_clock{clock_impl};
     }
@@ -229,5 +167,3 @@ namespace acc
         return ms;
     }
 }
-
-// vim:ft=cuda

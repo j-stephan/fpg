@@ -14,16 +14,23 @@
 #include <tuple>
 #include <vector>
 
-#include "accelerator.h"
+#include "common/common.h"
+
 #include "benchmark.h"
+#include "implementation.h"
 #include "params.h"
 #include "result.h"
 
 namespace benchmark
 {
+    namespace
+    {
+        auto handle_ = dev_handle{};
+    }
+
     auto init() -> void
     {
-        acc::init();
+        handle_ = common::init();
     }
 
     auto print_header() -> void
@@ -52,7 +59,7 @@ namespace benchmark
 
     auto run(const params& p) -> result
     {
-        auto info = acc::get_info();
+        auto info = common::get_info();
 
         auto r = result{};
 
@@ -80,41 +87,44 @@ namespace benchmark
                     auto rng = std::mt19937{rd()};
                     auto uid = std::uniform_int_distribution<>{0, 3};
                     std::generate(std::begin(data), std::end(data), [&]()
-                                  {
-                                      return uid(rng);
-                                  });
+                    {
+                        return uid(rng);
+                    });
 
                     auto result = std::vector<int>{};
-                    auto result_size = blocks_i * p.iterations + blocks_i;
+                    auto result_size = blocks_i;
                     result.resize(result_size); 
                     std::fill(std::begin(result), std::end(result), 0);
 
+                    // run benchmark
                     auto min_time = std::numeric_limits<float>::max(); 
+
+                    // own scope to satisfy SYCL
                     {
                         // copy to accelerator
-                        auto data_gpu = acc::make_array(data.size());
-                        auto result_gpu = acc::make_array(result.size());
-                        acc::copy_h2d(data, data_gpu);
-                        acc::copy_h2d(result, result_gpu);
+                        auto data_gpu = common::make_array(data.size());
+                        auto result_gpu = common::make_array(result.size());
+                        common::copy_h2d(data, data_gpu);
+                        common::copy_h2d(result, result_gpu);
 
                         // warm up
-                        acc::do_benchmark(data_gpu, result_gpu, s, blocks_i,
-                                          block_size);
+                        impl::reduce(handle_, data_gpu, result_gpu,
+                                     s, blocks_i, block_size);
 
-                        // run benchmark
                         for(auto j = 0u; j < p.iterations; ++j)
                         {
-                            auto start = acc::start_clock();
-                            acc::do_benchmark(data_gpu, result_gpu, s, blocks_i,
-                                              block_size);
-                            auto stop = acc::stop_clock();
-                            auto dur = acc::get_duration(start, stop);
+                            auto start = common::start_clock();
+                            impl::reduce(handle_, data_gpu, result_gpu,
+                                         s, blocks_i, block_size);
+                            auto stop = common::stop_clock();
+                            auto dur = common::get_duration(start, stop);
                             min_time = std::min(min_time, dur);
                         }
 
                         // verify
-                        acc::copy_d2h(result_gpu, result);
+                        common::copy_d2h(result_gpu, result);
                     }
+
                     auto verify = std::accumulate(std::begin(data),
                                                   std::end(data), 0);
                     if(verify != result[0])

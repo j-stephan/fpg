@@ -1,17 +1,9 @@
-/* Copyright (c) 2018, Jan Stephan
- * All rights reserved.
- *
- * This software may be modified and distributed under the terms of the BSD
- * license. See the LICENSE file for details.
- */
-
-#ifndef ACCELERATOR_H
-#define ACCELERATOR_H
+#ifndef COMMON_H_
+#define COMMON_H_
 
 #include <string>
-#include <vector>
 
-namespace acc
+namespace common
 {
     struct info
     {
@@ -22,6 +14,13 @@ namespace acc
         int mem_clock;
         int clock;
         int num_sm;
+    };
+
+    struct dev_handle_impl;
+    struct dev_handle
+    {
+        ~dev_handle();
+        dev_handle_impl* p_impl;
     };
 
     struct dev_ptr_impl;
@@ -38,19 +37,31 @@ namespace acc
         dev_clock_impl* p_impl;
     };
 
-    auto init() -> void;
+    // Initialize device context
+    auto init() -> dev_handle;
+
+    // Return info struct
     auto get_info() -> info;
 
+    // Create device memory
+    // size: number of elements
     auto make_array(std::size_t size) -> dev_ptr;
 
+    // Synchronous host-to-device copy
     auto copy_h2d(const std::vector<int>& src, dev_ptr& dst) -> void;
-    auto copy_d2h(dev_ptr& src, std::vector<int>& dst) -> void;
-    auto do_benchmark(dev_ptr& data, dev_ptr& result, std::size_t size,
-                      int blocks, int block_size) -> void;
 
-    auto start_clock() -> dev_clock;
-    auto stop_clock() -> dev_clock;
+    // Synchronous device-to-host copy
+    auto copy_d2h(const dev_ptr& src, std::vector<int>& dst) -> void;
+
+    // Start clock
+    auto start_clock(dev_handle& handle) -> dev_clock;
+
+    // Stop clock
+    auto stop_clock(dev_handle& handle) -> dev_clock;
+
+    // Returns duration in milliseconds
     auto get_duration(const dev_clock& start, const dev_clock& stop) -> float;
 }
 
 #endif
+

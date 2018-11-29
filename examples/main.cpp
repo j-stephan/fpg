@@ -6,6 +6,7 @@
  */
 
 #include <cstdlib>
+#include <iostream>
 
 #include "benchmark.h"
 
@@ -21,6 +22,7 @@ auto main() -> int
     }
     catch(const std::exception& e)
     {
+        std::cerr << "Unhandled exception: " << e.what() << std::endl;
         return EXIT_FAILURE;
     }
 
