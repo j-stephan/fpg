@@ -5,14 +5,12 @@
  * license. See the LICENSE file for details.
  */
 
-#include <algorithm> // TODO: Remove after debug
 #include <cstdint>
 #include <cstdlib>
 #include <cwchar>
 #include <exception>
 #include <iostream>
 #include <iterator>
-#include <numeric> // TODO: Remove after debug
 #include <locale>
 #include <string>
 #include <vector>
