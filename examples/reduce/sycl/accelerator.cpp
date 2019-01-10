@@ -421,6 +421,6 @@ namespace acc
                         cl::sycl::info::event_profiling::command_end>();
 
         // the events return nanoseconds but we want milliseconds
-        return static_cast<float>(stop - start) / 10e6;
+        return static_cast<float>(stop - start) / 1e6;
     }
 }
