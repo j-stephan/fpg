@@ -41,10 +41,9 @@ struct reader_writer
     auto operator()(cl::sycl::nd_item<1> my_item) -> void
     {
         auto stride = my_item.get_group_range(0) * my_item.get_local_range(0);
-        auto id = my_item.get_global_id(0);
         for(auto i = my_item.get_global_id(0); i < elems; i += stride)
         {
-            B[id] = A[id];
+            B[i] = A[i];
         }
     }
 };
@@ -58,10 +57,9 @@ struct writer
     auto operator()(cl::sycl::nd_item<1> my_item) -> void
     {
         auto stride = my_item.get_group_range(0) * my_item.get_local_range(0);
-        auto id = my_item.get_global_id(0);
         for(auto i = my_item.get_global_id(0); i < elems; i += stride)
         {
-            B[id] = cl::sycl::double2{0.0, 0.0};
+            B[i] = cl::sycl::double2{0.0, 0.0};
         }
     }
 };
@@ -231,7 +229,6 @@ auto main() -> int
             mintime = std::min(mintime, elapsed);
         }
 
-        std::cout << mintime << " ns" << std::endl;
         std::cout << "WO: mintime = " << mintime / 1e6 << " msec  "
                   << "throughput = "
                   << (2e-9 * sizeof(double2) * elems) / (mintime / 1e9)
