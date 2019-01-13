@@ -92,8 +92,7 @@ namespace benchmark
                     });
 
                     auto result = std::vector<int>{};
-                    auto result_size = blocks_i;
-                    result.resize(result_size); 
+                    result.resize(blocks_i); 
                     std::fill(std::begin(result), std::end(result), 0);
 
                     // run benchmark
@@ -129,6 +128,11 @@ namespace benchmark
                                                   std::end(data), 0);
                     if(verify != result[0])
                     {
+                        std::cerr << "s = " << s << std::endl;
+                        std::cerr << "blocks_i = " << blocks_i << std::endl;
+                        std::cerr << "blocks_n = " << blocks_n << std::endl;
+                        std::cerr << "block_size = " << block_size << std::endl;
+                        std::cerr << "i = " << i << std::endl;
                         std::cerr << "Mismatch: expected " << verify
                                   << ", got: " << result[0] << std::endl;
                         std::exit(EXIT_FAILURE);

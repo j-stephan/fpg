@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cwchar>
+#include <exception>
 #include <iostream>
 #include <iterator>
 #include <locale>
@@ -113,7 +114,22 @@ namespace acc
         acc_ = accelerators[index];
 
         // create queue on device
-        queue_ = cl::sycl::queue{acc_,
+        auto exception_handler = [] (cl::sycl::exception_list exceptions)
+        {
+            for(std::exception_ptr e : exceptions)
+            {
+                try
+                {
+                    std::rethrow_exception(e);
+                }
+                catch(const cl::sycl::exception& err)
+                {
+                    std::cerr << "Caught asynchronous SYCL exception: "
+                              << err.what() << std::endl;
+                }
+            }
+        };
+        queue_ = cl::sycl::queue{acc_, exception_handler,
                                  cl::sycl::property::queue::enable_profiling{}};
     }
 
@@ -214,26 +230,30 @@ namespace acc
 
     auto copy_h2d(const std::vector<int>& src, dev_ptr& dst) -> void
     {
-        auto&& dst_buf = dst.p_impl->data;
-        queue_.submit([&] (cl::sycl::handler& cgh)
-        {
-            auto accessor = dst_buf.get_access<
-                                cl::sycl::access::mode::discard_write>();
+        using namespace cl::sycl;
 
-            cgh.copy(src.data(), accessor);
+        auto dst_buf = dst.p_impl->data;
+
+        queue_.submit([&] (handler& cgh)
+        {
+            auto dst_acc = dst_buf.get_access<access::mode::discard_write>(cgh);
+            cgh.copy(src.data(), dst_acc);
         });
+        queue_.wait_and_throw();
     }
 
     auto copy_d2h(dev_ptr& src, std::vector<int>& dst) -> void
     {
-        auto&& src_buf = src.p_impl->data;
-        queue_.submit([&] (cl::sycl::handler& cgh)
-        {
-            auto accessor = src_buf.get_access<
-                                cl::sycl::access::mode::read>();
+        using namespace cl::sycl;
 
-            cgh.copy(accessor, dst.data());
+        auto src_buf = src.p_impl->data;
+
+        queue_.submit([&] (handler& cgh)
+        {
+            auto src_acc = src_buf.get_access<access::mode::read>(cgh);
+            cgh.copy(src_acc, dst.data());
         });
+        queue_.wait_and_throw();
     }
 
     struct block_reduce
@@ -250,16 +270,20 @@ namespace acc
 
         std::size_t size;
 
-        auto operator()(cl::sycl::nd_item<1> item) -> void
+        auto operator()(cl::sycl::nd_item<1> my_item) -> void
         {
-            auto i = item.get_global_id(0);
-            if(i > size)
+            using namespace cl::sycl;
+
+            auto i = my_item.get_global_id(0);
+
+            if(i >= size)
                 return;
 
             // avoid neutral element
             auto tsum = data[i];
 
-            auto grid_size = item.get_global_range(0);
+            auto grid_size = my_item.get_group_range(0) *
+                             my_item.get_local_range(0);
             i += grid_size;
 
             // GRID, read from global memory
@@ -277,12 +301,13 @@ namespace acc
                 i += grid_size;
             }
 
-            scratch[item.get_local_id(0)] = tsum;
-            item.barrier();
+            scratch[my_item.get_local_id(0)] = tsum;
 
-            auto block_id = item.get_group(0);
-            auto block_size = item.get_group_range(0);
-            auto local_id = item.get_local_id(0);
+            my_item.barrier(access::fence_space::local_space);
+            
+            auto block_size = my_item.get_local_range(0);
+            auto global_id = my_item.get_global_id(0);
+            auto local_id = my_item.get_local_id(0);
 
             // BLOCK + WARP, read from shared memory
             #pragma unroll
@@ -292,85 +317,76 @@ namespace acc
             {
                 auto cond = local_id < bsup &&
                             (local_id + bsup) < block_size &&
-                            (block_id * block_size + local_id + bsup) < size;
+                            (global_id + bsup) < size;
                 if(cond)
                 {
                     scratch[local_id] += scratch[local_id + bsup];
                 }                          
+                my_item.barrier(access::fence_space::local_space);
             }
 
-            item.barrier();
-
             // store to global memory
-            if(item.get_local_id(0) == 0)
-                result[block_id] = scratch[0];
+            if(my_item.get_local_id(0) == 0)
+                result[my_item.get_group_linear_id()] = scratch[0];
         }
     };
 
     auto do_benchmark(dev_ptr& data, dev_ptr& result, std::size_t size,
                       int blocks, int block_size) -> void
     {
+        using namespace cl::sycl;
+
         try
         {
-            auto& data_buf = data.p_impl->data;
-            auto& result_buf = result.p_impl->data;
+            auto data_buf = data.p_impl->data;
+            auto result_buf = result.p_impl->data;
 
-            first_event_ = queue_.submit([&] (cl::sycl::handler& cgh)
+            first_event_ = queue_.submit([&] (handler& cgh)
             {
                 // first loop
-                auto blocks_range = cl::sycl::range<1>{
-                                        static_cast<std::size_t>(blocks)};
-                auto block_size_range = cl::sycl::range<1>{
-                                        static_cast<std::size_t>(block_size)};
+                auto data_acc = data_buf.get_access<access::mode::read,
+                                        access::target::global_buffer>(cgh);
+                auto result_acc = result_buf.get_access<access::mode::write,
+                                        access::target::global_buffer>(cgh);
 
-                auto data_acc = data_buf.get_access<
-                                        cl::sycl::access::mode::read,
-                                        cl::sycl::access::target::global_buffer>
-                                        (cgh);
-                auto result_acc = result_buf.get_access<
-                                        cl::sycl::access::mode::write,
-                                        cl::sycl::access::target::global_buffer>
-                                        (cgh);
-                auto scratch_acc = cl::sycl::accessor<
-                                        std::int32_t, 1,
-                                        cl::sycl::access::mode::read_write,
-                                        cl::sycl::access::target::local>
-                                        {cl::sycl::range<1>{1024}, cgh};
-
+                auto scratch_acc = accessor<int,
+                                            1,
+                                            access::mode::read_write,
+                                            access::target::local>{
+                                            range<1>{block_size * sizeof(int)},
+                                            cgh};
                 auto reducer = block_reduce{data_acc, result_acc, scratch_acc,
                                             size};
-                cgh.parallel_for(cl::sycl::nd_range<1>{
-                                 blocks_range * block_size_range,
-                                 block_size_range}, reducer);
+
+                auto global_size = static_cast<std::size_t>(blocks *
+                                                            block_size);
+                auto local_size = static_cast<std::size_t>(block_size);
+                cgh.parallel_for(nd_range<1>{range<1>{global_size},
+                                             range<1>{local_size}},
+                                 reducer);
             });
 
-            last_event_ = queue_.submit([&] (cl::sycl::handler& cgh)
+            last_event_ = queue_.submit([&] (handler& cgh)
             {
                 // second loop
-                auto blocks_range = cl::sycl::range<1>{
-                                        static_cast<std::size_t>(1)};
-                auto block_size_range = cl::sycl::range<1>{
-                                        static_cast<std::size_t>(block_size)};
+                auto data_acc = result_buf.get_access<access::mode::read,
+                                    access::target::global_buffer>(cgh);
+                auto result_acc = result_buf.get_access<access::mode::write,
+                                    access::target::global_buffer>(cgh);
+                auto scratch_acc = accessor<int,
+                                            1,
+                                            access::mode::read_write,
+                                            access::target::local>{
+                                            range<1>{block_size * sizeof(int)},
+                                            cgh};
 
-                auto data_acc = result_buf.get_access<
-                                    cl::sycl::access::mode::read,
-                                    cl::sycl::access::target::global_buffer>
-                                    (cgh);
-                auto result_acc = result_buf.get_access<
-                                    cl::sycl::access::mode::write,
-                                    cl::sycl::access::target::global_buffer>
-                                    (cgh);
-                auto scratch_acc = cl::sycl::accessor<
-                                        std::int32_t, 1,
-                                        cl::sycl::access::mode::read_write,
-                                        cl::sycl::access::target::local>
-                                        {cl::sycl::range<1>{1024}, cgh};
-
-                auto reducer = block_reduce{data_acc, result_acc, scratch_acc,
+                auto reducer = block_reduce{data_acc, result_acc, scratch_acc, 
                                             static_cast<std::size_t>(blocks)};
-                cgh.parallel_for(cl::sycl::nd_range<1>{
-                                 blocks_range * block_size_range,
-                                 block_size_range}, reducer);
+                auto global_size = static_cast<std::size_t>(block_size);
+                auto local_size = static_cast<std::size_t>(block_size);
+                cgh.parallel_for(nd_range<1>{range<1>{global_size},
+                                             range<1>{local_size}},
+                                 reducer);
             });
         }
         catch(const cl::sycl::exception& err)
@@ -397,7 +413,7 @@ namespace acc
     auto get_duration(const dev_clock& /*start*/, const dev_clock& /*stop*/)
     -> float
     {
-        last_event_.wait();
+        last_event_.wait_and_throw();
      
         auto start = first_event_.get_profiling_info<
                         cl::sycl::info::event_profiling::command_start>();
@@ -405,6 +421,6 @@ namespace acc
                         cl::sycl::info::event_profiling::command_end>();
 
         // the events return nanoseconds but we want milliseconds
-        return static_cast<float>(stop - start) / 10e6;
+        return static_cast<float>(stop - start) / 1e6;
     }
 }
