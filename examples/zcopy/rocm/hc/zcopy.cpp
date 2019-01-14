@@ -1,7 +1,8 @@
 #include <algorithm>
-#include <iostream>
 #include <cstdlib>
+#include <iostream>
 #include <limits>
+#include <locale>
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-parameter"
@@ -14,6 +15,8 @@
 
 constexpr auto elems = 1 << 25;
 constexpr auto iters = 10;
+
+using double2 = hc::short_vector::double_2;
 
 namespace
 {
@@ -31,22 +34,21 @@ namespace
         new cvt{sys_loc.name()}};
 }
 
-auto initialize(hc::tiled_index<1> idx, hc::tiled_extent<1> extent,
-                hc::array_view<hc::double_2, 1> A,
-                hc::array_view<hc::double_2, 1> B) [[hc]] -> void
+auto initialize(hc::tiled_index<1> idx, hc::array_view<double2, 1> A,
+                hc::array_view<double2, 1> B) [[hc]] -> void
 {
     auto i = idx.global[0];
-    A[i] = hc::double_2{0.0, 0.0};
-    B[i] = hc::double_2{std::numeric_limits<double>::quiet_NaN(),
-                        std::numeric_limits<double>::quiet_NaN()};
+    A[i] = double2{0.0, 0.0};
+    B[i] = double2{std::numeric_limits<double>::quiet_NaN(),
+                   std::numeric_limits<double>::quiet_NaN()};
 }
 
-auto read_write(hc::tiled_index<1> idx, hc::tiled_extent<1> extent,
-                const hc::array_view<const hc::double_2, 1> A,
-                      hc::array_view<      hc::double_2, 1> B) [[hc]] -> void
+auto read_write(hc::tiled_index<1> idx, hc::array_view<double2, 1> A,
+                hc::array_view<double2, 1> B, int tiles,
+                int tile_size) [[hc]] -> void
 {
-    auto stride = extent[0] * extent.tile_dim[0];
-    for(auto i = idx.tile[0] * extent.tile_dim[0] + idx.local[0];
+    auto stride = tiles * tile_size;
+    for(auto i = idx.tile[0] * tile_size + idx.local[0];
              i < elems;
              i += stride)
     {
@@ -54,15 +56,15 @@ auto read_write(hc::tiled_index<1> idx, hc::tiled_extent<1> extent,
     } 
 }
 
-auto write(hc::tiled_index<1> idx, hc::tile_extent<1> extent,
-           hc::array_view<hc::double_2, 1>B) [[hc]] -> void
+auto write(hc::tiled_index<1> idx, hc::array_view<double2, 1>B, int tiles,
+           int tile_size) [[hc]] -> void
 {
-    auto stride = extent[0] * extent.tile_dim[0];
-    for(auto i = idx.tile[0] * extent.tile_dim[0] + idx.local[0];
+    auto stride = tiles * tile_size;
+    for(auto i = idx.tile[0] * tile_size + idx.local[0];
              i < elems;
              i += stride)
     {
-        B[i] = hc::double_2{0.0, 0.0};
+        B[i] = double2{0.0, 0.0};
     } 
 }
 
@@ -94,25 +96,22 @@ auto main() -> int
     hc::accelerator::set_default(accelerators[index].get_device_path());
 
     // Allocate memory on device
-    auto A_d = hc::array_view<hc::double_2, 1>{hc::extent<1>{elems}};
-    auto B_d = hc::array_view<hc::double_2, 1>{hc::extent<1>{elems}};
+    auto A_d = hc::array_view<double2, 1>{hc::extent<1>{elems}};
+    auto B_d = hc::array_view<double2, 1>{hc::extent<1>{elems}};
 
     // Initialize device memory
+    hc::parallel_for_each(hc::extent<1>{elems}.tile(1024),
+    [=] (hc::tiled_index<1> idx) [[hc]]
     {
-        auto global_extent = hc::extent<1>{elems};
-        auto tiled_extent = global_extent.tile(1024);
-        hc::parallel_for_each(tiled_extent, [=] (hc::tiled_index<1> idx)
-        {
-            initialize(idx, tiled_extent, A_d, B_d);
-        });
-    }
+        initialize(idx, A_d, B_d);
+    });
 
     constexpr auto tile_size = 128;
     constexpr auto num_tiles = (elems + (tile_size - 1)) / tile_size;
     constexpr auto tiles = num_tiles > 65520 ? 65520 : num_tiles;
 
     std::cout << "zcopy: operating on vectors of " << elems << " double2s"
-              << " = " << sizeof(hc::double_2) * elems << " bytes" << std::endl;
+              << " = " << sizeof(double2) * elems << " bytes" << std::endl;
 
     std::cout << "zcopy: using " << tile_size << " tiles per block, "
               << tiles << " tiles" << std::endl;
@@ -122,14 +121,12 @@ auto main() -> int
     {
         auto start = hc::get_system_ticks();
 
-        auto global_extent = hc::extent<1>{tiles * tile_size};
-        auto tiled_extent = global_extent.tile(tile_size);
-        hc::parallel_for_each(tiled_extent, [=] (hc::tiled_index<1> idx)
+        hc::parallel_for_each(hc::extent<1>{tiles * tile_size}.tile(tile_size),
+        [=] (hc::tiled_index<1> idx) [[hc]]
         {
-            read_write(idx, tiled_extent, A_d, B_d);
+            read_write(idx, A_d, B_d, tiles, tile_size);
         });
         
-
         auto stop = hc::get_system_ticks();
         auto elapsed_ticks = stop - start;
 
@@ -143,20 +140,18 @@ auto main() -> int
 
     std::cout << "RW: mintime = " << mintime << " msec  "
               << "throughput = "
-              << (2.0e-9 * sizeof(hc::double_2) * elems) / (mintime / 1e3)
+              << (2.0e-9 * sizeof(double2) * elems) / (mintime / 1e3)
               << " GB/sec" << std::endl;
 
     for(auto k = 0; k < iters; ++k)
     {
         auto start = hc::get_system_ticks();
 
-        auto global_extent = hc::extent<1>{tiles * tile_size};
-        auto tiled_extent = global_extent.tile(tile_size);
-        hc::parallel_for_each(tiled_extent, [=] (hc::tiled_index<1> idx)
+        hc::parallel_for_each(hc::extent<1>{tiles * tile_size}.tile(tile_size),
+        [=] (hc::tiled_index<1> idx) [[hc]]
         {
-            write(idx, tiled_extent, B_d);
+            write(idx, B_d, tiles, tile_size);
         });
-        
 
         auto stop = hc::get_system_ticks();
         auto elapsed_ticks = stop - start;
@@ -171,7 +166,7 @@ auto main() -> int
 
     std::cout << "WO: mintime = " << mintime << " msec  "
               << "throughput = "
-              << (1.0e-9 * sizeof(hc::double_2) * elems) / (mintime / 1e3)
+              << (1.0e-9 * sizeof(double2) * elems) / (mintime / 1e3)
               << " GB/sec" << std::endl;
 
     return EXIT_SUCCESS;
