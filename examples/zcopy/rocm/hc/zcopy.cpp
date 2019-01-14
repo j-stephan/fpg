@@ -12,7 +12,7 @@
 #include <hc_math.hpp>
 #include <hc_short_vector.hpp>
 
-constexpr auto elems = 1 << 28;
+constexpr auto elems = 1 << 25;
 constexpr auto iters = 10;
 
 namespace
@@ -171,7 +171,7 @@ auto main() -> int
 
     std::cout << "WO: mintime = " << mintime << " msec  "
               << "throughput = "
-              << (2.0e-9 * sizeof(hc::double_2) * elems) / (mintime / 1e3)
+              << (1.0e-9 * sizeof(hc::double_2) * elems) / (mintime / 1e3)
               << " GB/sec" << std::endl;
 
     return EXIT_SUCCESS;

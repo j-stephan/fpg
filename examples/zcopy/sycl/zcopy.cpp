@@ -231,7 +231,7 @@ auto main() -> int
 
         std::cout << "WO: mintime = " << mintime / 1e6 << " msec  "
                   << "throughput = "
-                  << (2e-9 * sizeof(double2) * elems) / (mintime / 1e9)
+                  << (1e-9 * sizeof(double2) * elems) / (mintime / 1e9)
                   << " GB/sec" << std::endl;
     }
     catch(const cl::sycl::exception& err)

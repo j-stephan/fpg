@@ -17,7 +17,7 @@
     } \
 } \
 
-constexpr auto elems = 1 << 28;
+constexpr auto elems = 1 << 25;
 constexpr auto iters = 10;
 
 __global__ void read_write(const double2* __restrict__ A,
@@ -141,7 +141,7 @@ auto main() -> int
 
     std::cout << "WO: mintime = " << mintime << " msec  "
               << "throughput = "
-              << (2.0e-9 * sizeof(double2) * elems) / (mintime / 1e3)
+              << (1.0e-9 * sizeof(double2) * elems) / (mintime / 1e3)
               << " GB/sec" << std::endl;
 
     return EXIT_SUCCESS;
