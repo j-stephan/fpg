@@ -1,7 +1,12 @@
 #include <algorithm>
+#include <chrono>
+#include <ctime>
+#include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <cstdlib>
 #include <limits>
+#include <sstream>
 
 #define CHECK(cmd) \
 { \
@@ -15,11 +20,10 @@
     } \
 } \
 
-constexpr auto elems = 1 << 25;
-constexpr auto iters = 10;
-
-__global__ void read_write(const double2* __restrict__ A,
-                                 double2* __restrict__ B)
+template <typename DataT>
+__global__ void read_write(const DataT* __restrict__ A,
+                                 DataT* __restrict__ B,
+                           std::size_t elems)
 {
     auto stride = gridDim.x * blockDim.x;
     for(auto i = blockIdx.x * blockDim.x + threadIdx.x; i < elems; i += stride)
@@ -28,12 +32,152 @@ __global__ void read_write(const double2* __restrict__ A,
     } 
 }
 
-__global__ void write(double2* __restrict__ B)
+template <typename DataT>
+__global__ void write(DataT* __restrict__ B, std::size_t elems);
+
+template <>
+__global__ void write<float>(float* __restrict__ B, std::size_t elems)
+{
+    auto stride = gridDim.x * blockDim.x;
+    for(auto i = blockIdx.x * blockDim.x + threadIdx.x; i < elems; i += stride)
+    {
+        B[i] = 0.f;
+    }
+}
+
+template <>
+__global__ void write<double>(double* __restrict__ B, std::size_t elems)
+{
+    auto stride = gridDim.x * blockDim.x;
+    for(auto i = blockIdx.x * blockDim.x + threadIdx.x; i < elems; i += stride)
+    {
+        B[i] = 0.0;
+    }
+}
+
+template <>
+__global__ void write<double2>(double2* __restrict__ B, std::size_t elems)
 {
     auto stride = gridDim.x * blockDim.x;
     for(auto i = blockIdx.x * blockDim.x + threadIdx.x; i < elems; i += stride)
     {
         B[i] = make_double2(0.0, 0.0);
+    }
+}
+
+template <>
+__global__ void write<double4>(double4* __restrict__ B, std::size_t elems)
+{
+    auto stride = gridDim.x * blockDim.x;
+    for(auto i = blockIdx.x * blockDim.x + threadIdx.x; i < elems; i += stride)
+    {
+        B[i] = make_double4(0.0, 0.0, 0.0, 0.0);
+    }
+}
+
+
+template <typename DataT>
+auto do_benchmark(int sms, int max_blocks, std::ofstream& file) -> void
+{
+    std::cout << "Benchmarking size " << sizeof(DataT) << std::endl;
+
+    constexpr auto iters = 10;
+    constexpr auto max_mem = 1u << 31; // mem per vector
+    constexpr auto max_elems = static_cast<int>(max_mem / sizeof(DataT));
+
+    for(auto block_size = 64; block_size <= 1024; block_size *= 2)
+    {
+        for(auto elems = block_size * sms; elems <= max_elems; elems *= 2)
+        {
+            // Allocate memory on device
+            auto A_d = static_cast<DataT*>(nullptr);
+            auto B_d = static_cast<DataT*>(nullptr);
+
+            CHECK(cudaMalloc(&A_d, sizeof(DataT) * elems));
+            CHECK(cudaMalloc(&B_d, sizeof(DataT) * elems));
+
+            for(auto block_num = sms;
+                     block_num <= std::min(elems / block_size, max_blocks);
+                     block_num *= 2)
+            {
+                // Initialize device memory
+                CHECK(cudaMemset(A_d, 0x00, sizeof(DataT) * elems)); // zero
+                CHECK(cudaMemset(B_d, 0xff, sizeof(DataT) * elems)); // NaN
+
+                auto mintime = std::numeric_limits<float>::max();
+                for(auto k = 0; k < iters; ++k)
+                {
+                    auto start_event = cudaEvent_t{};
+                    auto stop_event = cudaEvent_t{};
+                    CHECK(cudaDeviceSynchronize());
+                    CHECK(cudaEventCreate(&start_event));
+                    CHECK(cudaEventCreate(&stop_event));
+
+                    CHECK(cudaEventRecord(start_event, 0));
+                    read_write<<<block_num, block_size>>>(A_d, B_d, elems);
+                    CHECK(cudaEventRecord(stop_event, 0));
+
+                    CHECK(cudaEventSynchronize(stop_event));
+
+                    auto elapsed = float{};
+                    CHECK(cudaGetLastError());
+                    CHECK(cudaEventElapsedTime(&elapsed,
+                                              start_event, stop_event));
+
+                    mintime = std::min(mintime, elapsed);
+                }
+
+                file << "RW;" << block_size << ";" << block_num << ";"
+                     << sizeof(DataT) << ";" << elems << ";"
+                     << mintime << ";"
+                     << (2.0e-9 * sizeof(DataT) * elems) / (mintime / 1e3)
+                     << std::endl;
+            }
+
+            file << std::endl;
+
+            for(auto block_num = sms;
+                     block_num <= std::min(elems / block_size, max_blocks);
+                     block_num *= 2)
+            {
+                // Initialize device memory
+                CHECK(cudaMemset(B_d, 0xff, sizeof(DataT) * elems)); // NaN
+
+                auto mintime = std::numeric_limits<float>::max();
+                for(auto k = 0; k < iters; ++k)
+                {
+                    auto start_event = cudaEvent_t{};
+                    auto stop_event = cudaEvent_t{};
+                    CHECK(cudaDeviceSynchronize());
+                    CHECK(cudaEventCreate(&start_event));
+                    CHECK(cudaEventCreate(&stop_event));
+
+                    CHECK(cudaEventRecord(start_event, 0));
+                    write<<<block_num, block_size>>>(B_d, elems);
+                    CHECK(cudaEventRecord(stop_event, 0));
+
+                    CHECK(cudaEventSynchronize(stop_event));
+
+                    auto elapsed = float{};
+                    CHECK(cudaGetLastError());
+                    CHECK(cudaEventElapsedTime(&elapsed, start_event,
+                                               stop_event));
+
+                    mintime = std::min(mintime, elapsed);
+                }
+
+                file << "WO;" << block_size << ";" << block_num << ";"
+                     << sizeof(DataT) << ";" << elems << ";"
+                     << mintime << ";"
+                     << (1.0e-9 * sizeof(DataT) * elems) / (mintime / 1e3)
+                     << std::endl;
+            }
+
+            file << std::endl;
+
+            CHECK(cudaFree(B_d));
+            CHECK(cudaFree(A_d));
+        }
     }
 }
 
@@ -44,7 +188,7 @@ auto main() -> int
     CHECK(cudaGetDeviceCount(&dev_count));
 
     std::cout << "Available accelerators: " << std::endl;
-    for(auto i = 0u; i < dev_count; ++i)
+    for(auto i = 0; i < dev_count; ++i)
     {
         auto prop = cudaDeviceProp{};
         CHECK(cudaGetDeviceProperties(&prop, i));
@@ -67,79 +211,28 @@ auto main() -> int
     CHECK(cudaSetDevice(index));
     CHECK(cudaFree(nullptr));
 
-    // Allocate memory on device
-    auto A_d = static_cast<double2*>(nullptr);
-    auto B_d = static_cast<double2*>(nullptr);
+    auto prop = cudaDeviceProp{};
+    CHECK(cudaGetDeviceProperties(&prop, index));
+    
+    auto sms = prop.multiProcessorCount;
+    auto max_blocks = prop.maxGridSize[0];
 
-    CHECK(cudaMalloc(&A_d, sizeof(double2) * elems));
-    CHECK(cudaMalloc(&B_d, sizeof(double2) * elems));
+    auto now = std::chrono::system_clock::now();
+    auto cnow = std::chrono::system_clock::to_time_t(now);
 
-    // Initialize device memory
-    CHECK(cudaMemset(A_d, 0x00, sizeof(double2) * elems)); // zero
-    CHECK(cudaMemset(B_d, 0xff, sizeof(double2) * elems)); // NaN
+    auto filename = std::stringstream{};
+    filename << std::put_time(std::localtime(&cnow), "%Y-%m-%d %X");
+    filename << ".csv";
 
-    constexpr auto block_size = 128;
-    constexpr auto num_blocks = (elems + (block_size - 1)) / block_size;
-    constexpr auto blocks = num_blocks > 65520 ? 65520 : num_blocks;
+    auto file = std::ofstream{filename.str()};
 
-    std::cout << "zcopy: operating on vectors of " << elems << " double2s"
-              << " = " << sizeof(double2) * elems << " bytes" << std::endl;
+    file << "type;block_size;block_num;elem_size;elem_num;mintime;throughput"
+         << std::endl;
 
-    std::cout << "zcopy: using " << block_size << " threads per block, "
-              << blocks << " blocks" << std::endl;
-
-    auto mintime = std::numeric_limits<float>::max();
-    for(auto k = 0; k < iters; ++k)
-    {
-        auto start_event = cudaEvent_t{};
-        auto stop_event = cudaEvent_t{};
-        CHECK(cudaDeviceSynchronize());
-        CHECK(cudaEventCreate(&start_event));
-        CHECK(cudaEventCreate(&stop_event));
-
-        CHECK(cudaEventRecord(start_event, 0));
-        read_write<<<blocks, block_size>>>(A_d, B_d);
-        CHECK(cudaEventRecord(stop_event, 0));
-
-        CHECK(cudaEventSynchronize(stop_event));
-
-        auto elapsed = float{};
-        CHECK(cudaGetLastError());
-        CHECK(cudaEventElapsedTime(&elapsed, start_event, stop_event));
-
-        mintime = std::min(mintime, elapsed);
-    }
-
-    std::cout << "RW: mintime = " << mintime << " msec  "
-              << "throughput = "
-              << (2.0e-9 * sizeof(double2) * elems) / (mintime / 1e3)
-              << " GB/sec" << std::endl;
-
-    for(auto k = 0; k < iters; ++k)
-    {
-        auto start_event = cudaEvent_t{};
-        auto stop_event = cudaEvent_t{};
-        CHECK(cudaDeviceSynchronize());
-        CHECK(cudaEventCreate(&start_event));
-        CHECK(cudaEventCreate(&stop_event));
-
-        CHECK(cudaEventRecord(start_event, 0));
-        write<<<blocks, block_size>>>(B_d);
-        CHECK(cudaEventRecord(stop_event, 0));
-
-        CHECK(cudaEventSynchronize(stop_event));
-
-        auto elapsed = float{};
-        CHECK(cudaGetLastError());
-        CHECK(cudaEventElapsedTime(&elapsed, start_event, stop_event));
-
-        mintime = std::min(mintime, elapsed);
-    }
-
-    std::cout << "WO: mintime = " << mintime << " msec  "
-              << "throughput = "
-              << (1.0e-9 * sizeof(double2) * elems) / (mintime / 1e3)
-              << " GB/sec" << std::endl;
+    do_benchmark<float>(sms, max_blocks, file);
+    do_benchmark<double>(sms, max_blocks, file);
+    do_benchmark<double2>(sms, max_blocks, file);
+    do_benchmark<double4>(sms, max_blocks, file);
 
     return EXIT_SUCCESS;
 }
