@@ -7,5 +7,50 @@
 \subsection{Forschungsstand}
 \label{einleitung:forschung}
 
+Ein wie auch immer gearteter Vergleich der Programmiermodelle CUDA, SYCL, HC
+und HIP existiert zur Zeit (14.\ Januar 2019) nicht. Im vergangenen Jahrzehnt
+gab es jedoch einige vergleichende Analysen verschiedener Programmiermodelle im
+Kontext der Programmierung heterogener Systeme:
+
+Cardoso da Silva et al.\ führten 2016 einen Vergleich zwischen der
+SYCL-Implementierung triSYCL, OpenCL und OpenMP durch.
+(vgl.~\cite{dasilva2016})
+
+Im Mai 2018 untersuchten Lobato Gimenes et al.\ die Leistungsfähigkeit von
+CUDA, \gls{opencl}, \gls{openacc} und \gls{openmp} im Kontext seismischer
+Berechnungen.
+(vgl.~\cite{lobatogimenes2018})
+
+In der wissenschaftlichen Literatur taucht der Begriff \gls{rocm} erstmals 2016
+auf. Während sich die Arbeiten der ersten Jahreshälfte vornehmlich mit der
+\gls{hsa}-Architektur befassen und \gls{rocm} lediglich als verwendeten
+Software-Unterbau erwähnen (vgl.\ etwa \cite{li2016}, \cite{larsson2016}),
+unternahm Sun im Juli 2016 den vermutlich ersten Vergleich zwischen \gls{hip}
+und CUDA (vgl.~\cite{sun2016}. Es folgten viele verschiedene
+Leistungsanalysen auf der Basis von \gls{rocm}:
+
+Im September 2016 veröffentlichten Sun et al.\ ihre Benchmark-Suite
+\textit{Hetero-Mark}, die vornehmlich die Leistungsfähigkeit von \gls{apu}s
+misst und dabei auf \gls{rocm} und \gls{hc} aufsetzt (vgl.~\cite{sunyifan2016}).
+In die gleiche Richtung geht die im April 2017 von Gómez-Luna et al.\
+vorgestellte Benchmark-Suite \textit{Chai} (vgl.~\cite{gomezluna2017}). 
+
+Im Mai 2017 stellten Hou et al.\ Benchmarks vor, die auf der Ebene der Register,
+des L1-Caches und des \textit{shared memory} arbeiteten und in \gls{hc} und
+CUDA implementiert wurden. (vgl.~\cite{hou2017})
+
+Im Juli 2017 portierte Konstantinidis seine Sammlung von Micro-Benchmarks, die
+die Leistungsfähigkeit von CUDA-\gls{gpu}s auf der Instruktionsebene prüfen,
+mit der Hilfe von \gls{hip} auf die \gls{rocm}-Plattform.
+(vgl.~\cite{konstantinidis2017})
+
+Im Januar 2018 untersuchten Nobre et al.\ die Performanz und Genauigkeit von
+Fließkommazahlen mit halber Präzision auf AMD \gls{gpu}s.
+(vgl.~\cite{nobre2018})
+
+2018 untersuchten Veselý et al.\, inwieweit sich \textit{system calls} sinnvoll
+innerhalb eines \gls{gpu}-Kernels aufrufen lassen und verwendeten dafür
+\gls{rocm} und \gls{hc} (vgl.~\cite{vesely2018}).
+
 \subsection{Zielstellung}
 \label{einleitung:zielstellung}

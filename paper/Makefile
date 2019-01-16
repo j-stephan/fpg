@@ -26,10 +26,10 @@ $(PAPER_TARGET): $(PAPER_SOURCE) $(BIBLIOGRAPHY_SOURCE)
 	@echo ""
 	pdflatex -shell-escape -interaction=nonstopmode $(PAPER_SOURCE) 1> /dev/null 2> /dev/null
 	@echo ""
-	#@echo ">>> BIBTEX <<<"
-	#@echo ""
-	#bibtex $(PAPER_AUX)
-	#@echo ""
+	@echo ">>> BIBTEX <<<"
+	@echo ""
+	bibtex $(PAPER_AUX)
+	@echo ""
 	@echo ">>> GLOSSARIES <<<"
 	@echo ""
 	makeglossaries $(PAPER)

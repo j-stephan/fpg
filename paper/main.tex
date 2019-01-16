@@ -10,6 +10,9 @@
 \usepackage[binary-units]{siunitx}
 \usepackage{tcolorbox}
 
+\usepackage{CJKutf8}
+\AtBeginDvi{\input{zhwinfonts}}
+
 \input{glossar}
 
 \newenvironment{code}{\captionsetup{type=listing}}{}
@@ -28,7 +31,7 @@
           \qquad \qquad Matthias Werner, M.Sc.}
 \date{31.\ Januar 2019}
 
-%\bibfiles{bibliography.bib}
+\bibfiles{bibliography.bib}
 \def\UrlBreaks{\do\/\do-}
 
 % Germanisiere LaTeX

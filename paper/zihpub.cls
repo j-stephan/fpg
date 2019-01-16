@@ -472,7 +472,7 @@ Wissenschaftlichen Hochleistungsrechnen''}
 
 % Sprach-Dateien
 \if@german%
-  \RequirePackage[american,main=ngerman]{babel}
+  \RequirePackage[american,greek,main=ngerman]{babel}
   \RequirePackage[ngerman]{translator}
 \else
   \RequirePackage[main=american,ngerman]{babel}
