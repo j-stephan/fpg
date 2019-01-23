@@ -1,33 +1,78 @@
-\section{Übersicht der Spracherweiterungen}
+\section{Vergleich der Spracherweiterungen}
+\label{vergleich}
+
+\subsection{Anforderungen an Spracherweiterungen}
+
+Ein Vergleich der Fähigkeiten der einzelnen Spracherweiterungen erfordert einen
+Kriterienkatalog, anhand dessen die Bewertung erfolgen kann. Michael
+Wong \footnote{Mitglied des C++-Standard-Komitees, ehemaliger Projektleiter des
+XL-C++-Compilers der Firma IBM und mittlerweile Entwicklungsleiter des
+Unternehmens Codeplay, das unter anderem den SYCL-Standard implementiert}
+bezeichnete in einem Vortrag im November 2018 vor LLVM-Entwicklern die folgenden
+Punkte als essentiell:
+
+\paragraph{Datenbewegung} 
+Diese ist stets mit Kosten verbunden. Im Allgemeinen ist damit der Zeitbedarf
+gemeint, um Daten etwa vom Hauptspeicher des Systems auf den dedizierten
+Speicher der GPU zu verschieben. Im weiteren Sinne kann dieser Punkt aber auch
+andere Kriterien umfassen, wie z.B.\ den für die Verschiebung notwendigen
+Energiebedarf.
+
+Aus der Sicht des Programmierers ist außerdem die Frage relevant, ob die
+Datenbewegung \textit{explizit} oder \textit{implizit} erfolgt. Die
+\textit{explizite} Datenbewegung hat den Vorteil, dass der Programmierer
+jederzeit die volle Kontrolle über die Verschiebung und damit auch über die
+Performanz hat, geht jedoch mit einer höheren Programmierkomplexität und damit
+Fehleranfälligkeit einher. Überdies wird die volle Kontrolle nicht
+notwendigerweise an jeder Stelle gebraucht und bläht damit den Quelltext unnötig
+auf.
+
+Diesem Ansatz steht die \textit{implizite} Datenbewegung gegenüber. Diese
+überlässt den Zeitpunkt und den konkreten Vorgang des Kopierens oder
+Verschiebens sowie den Umfang der bewegten Datenmenge der Laufzeitumgebung; der
+Programmierer gibt üblicherweise nur noch an, welcher auf dem Beschleuniger
+gelegene Speicherbereich einem Systemspeicherbereich entspricht.
+
+Eine bewertende Gegenüberstellung beider Ansätze übersteigt den Rahmen dieser
+Arbeit. Stattdessen wird untersucht, in welcher Form beide Ansätze von den
+jeweiligen Spracherweiterungen unterstützt werden.
+
+\paragraph{Datenlokalität}
+
+
+
+\paragraph{Datenanordnung}
+Die Anordnung der Daten im Speicher kann aufgrund einer Reihe von Faktoren, wie
+etwa unterschiedlicher optimaler Zugriffsmuster von CPUs (\textit{cachelines})
+und GPUs (\textit{strided access}), erheblich zur Performanz der Berechnung
+beitragen. Aus Sicht des Programmieres ist es daher wünschenswert, dass die
+Spracherweiterung eine abstrakte Sicht auf den von ihr verwendeten Speicher
+bietet, welche die optimalen Zugriffsmuster der verschiedenen Hardware kapselt.
+
+\paragraph{Datenaffinität}
+
+Die Datenaffinität definiert die örtliche Nähe eines Speicherbereichs zur
+Ausführungseinheit bzw.\ zum Prozessor, der auf diesen Speicherbereich zugreifen
+muss. Dieser Aspekt ist eng mit der Datenlokalität verknüpft und vornehmlich für
+Systeme interessant, die dem Prinzip des \gls{numa} unterliegen, d.h.\ über
+keinen gemeinsamen globalen Speicher verfügen, der für alle Ausführungseinheiten
+und Speicherbereiche die selbe Zugriffszeit bietet.
+
+Diese Liste berücksichtigt einige wichtige Faktoren jedoch nicht:
+
+\begin{itemize}
+    \item Kompilierungsmodell
+    \item 
+\end{itemize}
 
 \subsection{CUDA}
-
-\subsubsection{Geschichtliche Entwicklung}
-
-\subsubsection{Programmiermodell}
-
-\subsubsection{Hardware-Unterstützung}
 
 \subsubsection{Ökosystem}
 
 \subsection{ROCm}
 
-\subsubsection{Geschichtliche Entwicklung}
-
-\subsubsection{HCC}
-
-\subsubsection{HIP}
-
-\subsubsection{Hardware-Unterstützung}
-
 \subsubsection{Ökosystem}
 
 \subsection{SYCL}
-
-\subsubsection{Geschichtliche Entwicklung}
-
-\subsubsection{Programmiermodell}
-
-\subsubsection{Implementierungen}
 
 \subsubsection{Ökosystem}
