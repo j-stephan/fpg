@@ -1,0 +1,330 @@
+#include <algorithm>
+#include <cstdint>
+#include <cstdlib>
+#include <iostream>
+#include <iterator>
+#include <random>
+#include <vector>
+#include <utility>
+
+#define SYCL_SIMPLE_SWIZZLES
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-parameter"
+#include <CL/sycl.hpp>
+#pragma clang diagnostic pop
+
+constexpr auto eps = 0.001f;
+constexpr auto eps2 = eps * eps;
+constexpr auto damping = 0.5f;
+constexpr auto delta_time = 0.2f;
+constexpr auto iterations = 10;
+
+using float3 = cl::sycl::float3;
+using float4 = cl::sycl::float4;
+
+// FIXME: using this because there is no rsqrt for NVIDIA right now
+auto Q_rsqrt(const float number) -> float
+{
+    // evil floating point bit level hacking, taken from Quake 3 Arena
+    const auto x2 = number * 0.5f;
+    auto y = number;
+    auto i = *(reinterpret_cast<std::int32_t*>(&y));
+
+    i = 0x5f3759df - (i >> 1);
+
+    y = *(reinterpret_cast<float*>(&i));
+    y *= 1.5f - (x2 * y * y);
+
+    return y;
+}
+
+auto body_body_interaction(float4 bi, float4 bj, float3 ai) -> float3
+{
+    // r_ij [3 FLOPS]
+    const auto r = bj.xyz() - bi.xyz();
+
+    // dist_sqr = dot(r_ij, r_ij) + EPS^2 [6 FLOPS]
+    const auto dist_sqr = cl::sycl::fma(r.x(), r.x(), cl::sycl::fma(
+                                            r.y(), r.y(), cl::sycl::fma(
+                                                r.z(), r.z(), eps2)));
+    // auto dist_sqr = float{r.x() * r.x() + r.y() * r.y() + r.z() * r.z()} + eps2;
+
+    // inv_dist_cube = 1/dist_sqr^(3/2) [4 FLOPS]
+    const auto dist_sixth = dist_sqr * dist_sqr * dist_sqr;
+
+    // FIXME: rsqrt currently not supported on NVIDIA devices
+    // auto inv_dist_cube = cl::sycl::rsqrt(dist_sixth);
+    const auto inv_dist_cube = Q_rsqrt(dist_sixth);
+
+    // s = m_j * inv_dist_cube [1 FLOP]
+    const auto s = float{bj.w()} * inv_dist_cube;
+    const auto s3 = float3{s, s, s};
+
+    // a_i = a_i + s * r_ij [6 FLOPS]
+    ai = cl::sycl::fma(r, s3, ai);
+
+    return ai;
+}
+
+auto force_calculation(cl::sycl::nd_item<1> my_item, float4 body_pos,
+                       cl::sycl::accessor<float4, 1,
+                        cl::sycl::access::mode::read,
+                        cl::sycl::access::target::global_buffer> positions,
+                       cl::sycl::accessor<float4, 1,
+                        cl::sycl::access::mode::read_write,
+                        cl::sycl::access::target::local> sh_position,
+                       unsigned tiles)
+-> float3
+{
+    auto acc = float3{0.f, 0.f, 0.f};
+
+    for(auto tile = 0u; tile < tiles; ++tile)
+    {
+        auto idx = tile * my_item.get_local_range(0) + my_item.get_local_id(0);
+
+        sh_position[my_item.get_local_id()] = positions[idx];
+        my_item.barrier(cl::sycl::access::fence_space::local_space);
+
+        // this loop corresponds to tile_calculation() from GPUGems 3
+        #pragma unroll
+        for(auto i = 0u; i < my_item.get_local_range(0); ++i)
+        {
+            acc = body_body_interaction(body_pos, sh_position[i], acc);
+        }
+        my_item.barrier(cl::sycl::access::fence_space::local_space);
+    }
+
+    return acc;
+}
+
+struct body_integrator
+{  
+    cl::sycl::accessor<float4, 1, cl::sycl::access::mode::read,
+                       cl::sycl::access::target::global_buffer> old_pos;
+
+    cl::sycl::accessor<float4, 1, cl::sycl::access::mode::discard_write,
+                       cl::sycl::access::target::global_buffer> new_pos;
+    
+    cl::sycl::accessor<float4, 1, cl::sycl::access::mode::read_write,
+                       cl::sycl::access::target::global_buffer> vel;
+
+    cl::sycl::accessor<float4, 1, cl::sycl::access::mode::read_write,
+                       cl::sycl::access::target::local> sh_position;
+
+    std::size_t n;  // bodies
+    unsigned tiles;
+
+    auto operator()(cl::sycl::nd_item<1> my_item) -> void
+    {
+        auto index = my_item.get_global_id(0);
+        if(index >= n)
+            return;
+
+        auto position = old_pos[index];
+        auto accel = force_calculation(my_item, position, old_pos,
+                                       sh_position, tiles);
+
+        /*
+         * acceleration = force / mass
+         * new velocity = old velocity + acceleration * delta_time
+         * note that the body's mass is canceled out here and in
+         *  body_body_interaction. Thus force == acceleration
+         */
+        auto velocity = vel[index];
+
+        velocity.xyz() += accel.xyz() * delta_time;
+        velocity.xyz() *= damping;
+
+        position.xyz() += velocity.xyz() * delta_time; 
+
+        new_pos[index] = position;
+        vel[index] = velocity;
+    }
+};
+
+auto main() -> int
+{
+    try
+    {
+        auto gen = std::mt19937{std::random_device{}()};
+        auto dis = std::uniform_real_distribution<float>{-42.f, 42.f};
+
+        auto platforms = cl::sycl::platform::get_platforms();
+        std::cout << "Available platforms: " << std::endl;
+        for(auto i = 0u; i < platforms.size(); ++i)
+        {
+            auto&& p = platforms[i];
+            auto vendor = p.get_info<cl::sycl::info::platform::vendor>();
+            auto name = p.get_info<cl::sycl::info::platform::name>();
+            std::cout << "\t[" << i << "] Vendor: " << vendor << ", "
+                      << "name: " << name << std::endl;
+        }
+
+        std::cout << std::endl;
+        std::cout << "Select platform: ";
+        auto index = 0u;
+        std::cin >> index;
+
+        if(index >= platforms.size())
+        {
+            std::cout << "I'm sorry, Dave. I'm afraid I can't do that."
+                      << std::endl;
+            std::exit(EXIT_FAILURE);
+        }
+
+        auto&& platform = platforms[index];
+
+        // set up default context
+        auto ctx = cl::sycl::context{platform};
+
+        // set up default accelerator
+        auto accelerators = ctx.get_devices();
+        std::cout << "Available accelerators: " << std::endl;
+        for(auto i = 0u; i < accelerators.size(); ++i)
+        {
+            auto&& acc = accelerators[i];
+            auto vendor = acc.get_info<cl::sycl::info::device::vendor>(); 
+            auto name = acc.get_info<cl::sycl::info::device::name>();
+            std::cout << "\t[" << i << "] Vendor: " << vendor << ", "
+                      << "name: " << name << std::endl;
+        }
+
+        std::cout << std::endl;
+        std::cout << "Select accelerator: ";
+        std::cin >> index;
+
+        if(index >= accelerators.size())
+        {
+            std::cout << "I'm sorry, Dave. I'm afraid I can't do that."
+                      << std::endl;
+            std::exit(EXIT_FAILURE);
+        }
+
+        auto acc = accelerators[index];
+
+        // create queue on device
+        auto exception_handler = [] (cl::sycl::exception_list exceptions)
+        {
+            for(std::exception_ptr e : exceptions)
+            {
+                try
+                {
+                    std::rethrow_exception(e);
+                }
+                catch(const cl::sycl::exception& err)
+                {                    
+                    std::cerr << "Caught asynchronous SYCL exception: "
+                              << err.what() << std::endl;
+                }
+            }
+        };
+    
+        auto queue = cl::sycl::queue{acc, exception_handler,
+                        cl::sycl::property::queue::enable_profiling{}};
+
+        for(auto n = 1024ul; n <= 524288ul; n *= 2ul)
+        {
+            auto old_positions = std::vector<float4>{};
+            auto new_positions = std::vector<float4>{};
+            auto velocities = std::vector<float4>{};
+
+            old_positions.resize(n);
+            new_positions.resize(n);
+            velocities.resize(n);
+
+            auto init_vec = [&]()
+            {
+                return float4{dis(gen), dis(gen), dis(gen), 0.f};
+            };
+
+            std::generate(begin(old_positions), end(old_positions), init_vec);
+            std::fill(begin(new_positions), end(new_positions), float4{});
+            std::generate(begin(velocities), end(velocities), init_vec);
+
+            auto d_old_positions = cl::sycl::buffer<float4, 1>{
+                                                     begin(old_positions),
+                                                     end(old_positions)};
+            auto d_new_positions = cl::sycl::buffer<float4, 1>{
+                                                     begin(new_positions),
+                                                     end(new_positions)};
+            auto d_velocities = cl::sycl::buffer<float4, 1>{
+                                                  begin(velocities),
+                                                  end(velocities)};
+
+            for(auto block_size = 32u; block_size <= 1024u; block_size *= 2)
+            {
+                auto tiles = (static_cast<unsigned>(n) + block_size - 1)
+                             / block_size;
+                
+                auto first_event = cl::sycl::event{};
+                auto last_event = cl::sycl::event{};
+
+                for(auto i = 0; i < iterations; ++i)
+                {
+                    last_event = queue.submit([&] (cl::sycl::handler& cgh)
+                    {
+                        auto old_positions_acc = d_old_positions.get_access<
+                            cl::sycl::access::mode::read,
+                            cl::sycl::access::target::global_buffer>(cgh);
+
+                        auto new_positions_acc = d_new_positions.get_access<
+                            cl::sycl::access::mode::discard_write,
+                            cl::sycl::access::target::global_buffer>(cgh);
+
+                        auto velocities_acc = d_velocities.get_access<
+                            cl::sycl::access::mode::read_write,
+                            cl::sycl::access::target::global_buffer>(cgh);
+
+                        auto sh_positions_acc = cl::sycl::accessor<
+                            float4, 1, cl::sycl::access::mode::read_write,
+                            cl::sycl::access::target::local>{
+                                cl::sycl::range<1>{block_size},
+                                cgh};
+
+                        auto integrator = body_integrator{old_positions_acc,
+                            new_positions_acc, velocities_acc,
+                            sh_positions_acc, n, tiles};
+
+                        cgh.parallel_for(
+                            cl::sycl::nd_range<1>{
+                                cl::sycl::range<1>{n},
+                                cl::sycl::range<1>{block_size}},
+                            integrator);
+                    });
+
+                    if(i == 0)
+                        first_event = last_event;
+
+                    last_event.wait_and_throw();
+                    std::swap(d_old_positions, d_new_positions);
+                }
+                last_event.wait_and_throw();
+
+                auto start = first_event.get_profiling_info<
+                    cl::sycl::info::event_profiling::command_start>();
+                auto stop = last_event.get_profiling_info<
+                    cl::sycl::info::event_profiling::command_end>();
+
+                auto time_ns = stop - start;
+                auto time_s = time_ns / 1e9;
+                auto time_ms = time_ns / 1e6;
+
+                constexpr auto flops_per_interaction = 20.;
+                auto interactions = static_cast<double>(n * n);
+                auto interactions_per_second = interactions * iterations 
+                                               / time_s;
+                auto flops = interactions_per_second * flops_per_interaction;
+                auto gflops = flops / 1e9;
+
+                std::cout << block_size << ";" << n << ";" << time_ms << ";"
+                          << gflops << std::endl;
+            }
+        }
+    }
+    catch(const cl::sycl::exception& e)
+    {
+        std::cerr << e.what() << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
+    return EXIT_SUCCESS;
+}
