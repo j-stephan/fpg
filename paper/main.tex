@@ -8,7 +8,12 @@
 \usepackage[super]{nth}
 \usepackage{pgfplots}
 \usepackage[binary-units]{siunitx}
+\usepackage{subcaption}
 \usepackage{tcolorbox}
+\usepackage{tikz}
+\usepackage{tkz-berge}
+
+\usetikzlibrary{arrows}
 
 \usepackage{CJKutf8}
 \AtBeginDvi{\input{zhwinfonts}}
@@ -22,6 +27,8 @@
 \AfterEndEnvironment{minted}{\end{tcolorbox}}
 
 \newcommand{\lstfont}[1]{\color{#1}\small\ttfamily}
+
+\definecolor{keyword-green}{RGB}{0, 128, 0}
 
 \author{Jan Stephan}
 \title{Innovative Spracherweiterungen für Beschleunigerkarten am Beispiel von
@@ -57,6 +64,7 @@
 \include{methoden}
 \include{nvidia}
 \include{amd}
+\include{oekosysteme}
 \include{fazit}
 
 \listoflistings

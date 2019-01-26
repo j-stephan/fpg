@@ -1,6 +1,7 @@
 \makeglossaries
 
-\newacronym{apu}{APU}{\textit{Accelerated Processing Unit}}
+\newacronym{api}{API}{\textit{application programming interface}}
+\newacronym{apu}{APU}{\textit{accelerated processing unit}}
 
 \newacronym{cpu}{CPU}{\textit{central processing unit}}
 
@@ -27,3 +28,32 @@
 \newacronym{rocm}{ROCm}{\textit{Radeon Open Compute Platform}}
 \newacronym{rocr}{ROCr}{\textit{Radeon Open Compute Platform Runtime}}
 \newacronym{roct}{ROCt}{\textit{Radeon Open Compute Thunk Interface}}
+
+\newglossaryentry{kernel}{name = Kernel,
+                          description = {Programm, das auf einem Beschleuniger,
+                                         wie etwa einer GPU, ausgeführt wird.},
+                          plural = Kernel}
+\newglossaryentry{host}{name = Host,
+                        description = {Gerät, das einen Kernel auf dem Device
+                                       ausführen lässt. Üblicherweise das Gerät,
+                                       auf dem das Betriebssystem läuft, etwa
+                                       ein PC oder ein Knoten auf einem
+                                       Superrechner.},
+                        plural = Hosts}
+\newglossaryentry{device}{name = Device,
+                          description = {Gerät, das einen Kernel ausführt. Im
+                                         Kontext dieser Arbeit stets eine GPU.},
+                          plural = Devices}
+\newglossaryentry{singlesource}{name = {single-source compilation},
+                                description = {Die Quelltexte für Host und
+                                               Device werden gleichzeitig vom
+                                               Compiler für die
+                                               Zielarchitekturen übersetzt.}}
+\newglossaryentry{splitsource}{name = {split-source compilation},
+                               description = {Die Quelltexte für Host und
+                                              Device werden getrennt kompiliert.
+                                              Der Host-Quelltext wird von einem
+                                              normalen Compiler übersetzt, der
+                                              Device-Quelltext erst zur Laufzeit
+                                              des Programms von einem weiteren
+                                              Compiler.}}

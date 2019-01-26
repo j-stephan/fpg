@@ -6,33 +6,36 @@
 
 Das Feld der \gls{gpgpu} ist seit 2006 vor allem durch NVIDIAs CUDA-Plattform
 und GPUs geprägt und dominiert worden. Auf der Hardware-Seite konnte die
-Konkurrenz (vor allem in Form der Firma AMD) lange Zeit wenig
-entgegensetzen -- heute (November 2018) sind NVIDIA-GPUs in fünf der zehn
-leistungsstärksten Supercomputer vorhanden, darunter die ersten beiden Plätze.
-Auf der Liste der 500 leistungsstärksten Supercomputer finden sich mit
-NVIDIA-GPUs bestückte Rechner insgesamt 126 Mal, GPUs des größten
-Konkurrenten AMD kein einziges Mal. Intels als GPU-Alternative vor- und
-mittlerweile zugunsten einer noch unbekannten zukünftigen Plattform
-(vgl.~\cite{intel2017}) eingestellten Xeon-Phi-Beschleuniger sind auf dieser
-Liste noch 30 Mal vertreten. (vgl.~\cite{top500})
+Konkurrenz (vor allem der GPU-Hersteller AMD) lange Zeit wenig entgegensetzen
+-- heute (November 2018) sind NVIDIA-GPUs in fünf der zehn leistungsstärksten
+Supercomputer vorhanden, darunter die ersten beiden Plätze. Auf der Liste der
+500 leistungsstärksten Supercomputer finden sich mit NVIDIA-GPUs bestückte
+Rechner insgesamt 126 Mal, GPUs des größten Konkurrenten AMD kein einziges Mal.
+Intels als GPU-Alternative vor- und mittlerweile zugunsten einer noch
+unbekannten zukünftigen Plattform (vgl.~\cite{intel2017}) eingestellten
+Xeon-Phi-Beschleuniger sind auf dieser Liste noch 30 Mal vertreten.
+(vgl.~\cite{top500})
 
 Softwareseitig entstand ab 2008 mit der von Apple entwickelten und vom
 Khronos-Industriekonsortium standardisierten \gls{opencl} ein offener und
 hardware-übergreifender Konkurrent der CUDA-Plattform, der zunächst von einer
-Reihe wichtiger Hersteller (einschließlich NVIDIA) unterstützt wurde. Im Laufe
-der Jahre zeigte sich jedoch, dass die Unterstützung durch die Hersteller mit
-jeder weiteren Revision des Standards abnahm; so ist die 2011 erschienene
-\gls{opencl}-Version 1.2 bis heute die neueste Version, die von NVIDIA und
-AMD\footnote{AMD unterstützte zwischenzeitlich \gls{opencl} 2.0, ist jedoch
-infolge des Umbaus des eigenen Treiber- und Compute-Ökosystems auf \gls{opencl}
-1.2 zurückgegangen.} unterstützt wird. Lediglich Intel bietet eine
-Implementierung eines modernen \gls{opencl}-Standards an, beschränkt sich dabei
-aber auf seine CPUs und integrierten GPUs. Eine \gls{opencl}-Implementierung für
-die neuesten Produktlinien der Xeon-Phi-Reihe, \textit{Knights Landing} und
-\textit{Knights Mill}, existiert nicht, während \gls{opencl} 1.0 (2008) die
-einzige Implementierung für ein \gls{fpga} darstellt.
+Reihe wichtiger Hersteller (einschließlich NVIDIA) unterstützt wurde. Im 
+Gegensatz zu CUDA wurde \gls{opencl} von Anfang an auf verschiedene Arten von
+Beschleunigern ausgelegt, wie etwa Systeme mit einem \gls{dsp} oder einem
+\gls{fpga}. Mit der Zeit zeigte sich jedoch, dass die Unterstützung durch die
+Hersteller mit jeder weiteren Revision des Standards abnahm; so ist die 2011
+erschienene \gls{opencl}-Version 1.2 bis heute die neueste Version, die von
+NVIDIA und AMD\footnote{AMD unterstützte zwischenzeitlich \gls{opencl} 2.0, ist
+jedoch infolge des Umbaus des eigenen Treiber- und Compute-Ökosystems auf
+\gls{opencl} 1.2 zurückgegangen.} vollständig unterstützt wird. Lediglich Intel
+bietet eine Implementierung eines modernen \gls{opencl}-Standards an, beschränkt
+sich dabei aber auf seine CPUs und integrierten GPUs. Eine
+\gls{opencl}-Implementierung für die neuesten Produktlinien der Xeon-Phi-Reihe,
+\textit{Knights Landing} und \textit{Knights Mill}, existiert nicht, während
+\gls{opencl} 1.0 (2008) die einzige verfügbare Version für \gls{fpga}s
+darstellt.
 
-Sowohl Khronos als auch AMD versuchen seit wenigen Jahren, durch neue
+Sowohl Khronos als auch AMD versuchen seit einigen Jahren, durch neue
 Technologien im Umfeld des \gls{hpc} wieder Anschluss an NVIDIA zu finden. Im
 März 2014 stellte Khronos den SYCL-Standard vor, der auf \gls{opencl}s Konzepten
 und Portabilität aufbaut, jedoch eine auf C++ basierende, deutlich modernere
