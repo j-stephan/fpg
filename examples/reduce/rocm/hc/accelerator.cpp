@@ -220,10 +220,11 @@ namespace acc
             }
             idx.barrier.wait_with_tile_static_memory_fence();
 
-            // store to global memory
-            if(idx.local[0] == 0)
-                result[idx.tile[0]] = scratch[0];
         }
+
+        // store to global memory
+        if(idx.local[0] == 0)
+            result[idx.tile[0]] = scratch[0];
     }
 
     auto do_benchmark(const dev_ptr& data, dev_ptr& result, std::size_t size,

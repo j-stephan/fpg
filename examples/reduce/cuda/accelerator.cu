@@ -17,14 +17,14 @@
 
 #define CHECK(cmd) \
 { \
-        auto error = cmd; \
-        if(error != cudaSuccess) \
-        { \
-                    std::cerr << "Error: '" << cudaGetErrorString(error) \
-                              << "' (" << error << ") at " << __FILE__ << ":" \
-                              << __LINE__  << std::endl; \
-                    std::exit(EXIT_FAILURE); \
-                } \
+    auto error = cmd; \
+    if(error != cudaSuccess) \
+    { \
+        std::cerr << "Error: '" << cudaGetErrorString(error) \
+                  << "' (" << error << ") at " << __FILE__ << ":" \
+                  << __LINE__  << std::endl; \
+        std::exit(EXIT_FAILURE); \
+    } \
 }
 
 namespace acc
@@ -184,10 +184,11 @@ namespace acc
             }
             __syncthreads();
 
-            // store to global memory
-            if(threadIdx.x == 0)
-                result[blockIdx.x] = scratch[0];
         }
+
+        // store to global memory
+        if(threadIdx.x == 0)
+            result[blockIdx.x] = scratch[0];
     }
 
     auto do_benchmark(const dev_ptr& data, dev_ptr& result, std::size_t size,
