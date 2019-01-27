@@ -28,14 +28,14 @@
 
 #define CHECK(cmd) \
 { \
-        auto error = cmd; \
-        if(error != hipSuccess) \
-        { \
-                    std::cerr << "Error: '" << hipGetErrorString(error) \
-                              << "' (" << error << ") at " << __FILE__ << ":" \
-                              << __LINE__  << std::endl; \
-                    std::exit(EXIT_FAILURE); \
-                } \
+    auto error = cmd; \
+    if(error != hipSuccess) \
+    { \
+        std::cerr << "Error: '" << hipGetErrorString(error) \
+                  << "' (" << error << ") at " << __FILE__ << ":" \
+                  << __LINE__  << std::endl; \
+        std::exit(EXIT_FAILURE); \
+    } \
 }
 
 namespace acc
@@ -195,10 +195,11 @@ namespace acc
             }
             __syncthreads();
 
-            // store to global memory
-            if(hipThreadIdx_x == 0)
-                result[hipBlockIdx_x] = scratch[0];
         }
+
+        // store to global memory
+        if(hipThreadIdx_x == 0)
+            result[hipBlockIdx_x] = scratch[0];
     }
 
     auto do_benchmark(const dev_ptr& data, dev_ptr& result, std::size_t size,
