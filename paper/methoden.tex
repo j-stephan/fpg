@@ -4,11 +4,127 @@
 \subsection{Theoretische Konzepte}
 \label{methoden:konzepte}
 
-\subsubsection{Speicherhierarchie}
+Um von den Spracherweiterungen und ihren unterschiedlichen Konzepten in Bezug
+auf die Ausführung von Kerneln und die Speicherhierarchie abstrahieren zu
+können, wird in diesem Abschnitt ein theoretisches GPU-Modell vorgestellt.
+Dieses umfasst alle für das Verständnis der Benchmarks notwendigen Eigenschaften
+einer GPU und lässt sich einfach auf die konkreten Konzepte der
+Spracherweiterungen abbilden.
 
 \subsubsection{Arbeitsgruppen und -einheiten}
 
+Bei der Ausführung von Kerneln sind zwei Ebenen zu unterscheiden:
+
+\begin{itemize}
+    \item Eine \textbf{Arbeitseinheit} ist eine logische Instanz, die auf einen
+          Hardware-Thread eines Multiprozessors abgebildet werden kann.
+    \item \textbf{Arbeitsgruppen} umfassen eine unbestimmte Zahl von
+          Arbeitseinheiten und werden auf die Multiprozessoren der GPU verteilt.
+          Arbeitseinheiten innerhalb einer Gruppe sind untereinander
+          möglicherweise asynchron, können aber durch Barrieren synchronisiert
+          werden. Durch die Verteilung der Arbeitsgruppen auf die
+          Multiprozessoren sind auch die Arbeitsgruppen untereinander asynchron
+          und können nicht synchronisiert werden.
+\end{itemize}
+
+Die Tabelle~\ref{methoden:konzepte:arbeit:tabelle} zeigt die Abbildung der
+hier vorgestellten Konzepte auf die äquivalenten Konzepte der verschiedenen
+Plattformen.
+
+\begin{table}[htb]
+    \centering
+    \begin{tabular}{|c|c|c|c|}
+        \hline
+        Modell & CUDA / HIP & HC & SYCL\\ \hline
+        Arbeitsgruppe & block & tile & work group\\ \hline
+        Arbeitseinheit & thread & thread & work item\\ \hline
+    \end{tabular}
+    \caption{Abbildung der Ausführungskonzepte des Modells auf die
+             Entsprechungen der Spracherweiterungen}
+    \label{methoden:konzepte:arbeit:tabelle}
+\end{table}
+
+\subsubsection{Speicherhierarchie}
+\label{methoden:konzepte:speicher}
+
+Das theoretische GPU-Modell kennt drei Ebenen der Speicherhierarchie:
+
+\begin{itemize}
+    \item Die höchste Ebene ist der \textbf{globale Speicher}. Er entspricht dem
+          globalen (GDDR- oder HBM-) Speicher auf realen GPUs, ist im Modell
+          jedoch unendlich groß, während die Zugriffszeit sehr langsam ist.
+    \item Die nächste Ebene ist der \textbf{lokale Speicher}. Dieser hat in der
+          realen Welt unterschiedlich benannte Entsprechungen
+          (siehe Tabelle~\ref{methoden:konzepte:speicher:tabelle}), meint aber
+          immer den schnellen Speicher, der einer Arbeitsgruppe zugeordnet ist.
+          Er ist in der Kapazität beschränkt und deutlich kleiner als der
+          globale Speicher, während er wesentlich schnellere Zugriffe
+          ermöglicht.
+    \item Auf der untersten Ebene befinden sich die \textbf{Register}, die jeder
+          Ausführungseinheit in unbegrenzter Zahl zugeordnet sind. Wie in der
+          realen Welt sind sie nicht direkt vom Programmierer ansprechbar. Der
+          Modell-Compiler platziert in ihnen lokale Variablen der
+          Arbeitseinheiten.
+\end{itemize}
+
+\begin{table}[htb]
+    \centering
+    \begin{tabular}{|c|c|c|c|}
+        \hline
+        Modell & CUDA / HIP & HC & SYCL\\ \hline
+        globaler Speicher & global memory & global memory & global memory\\
+        \hline
+        lokaler Speicher & shared memory & \texttt{tile\_static} memory &
+        local memory \\
+        \hline
+    \end{tabular}
+    \caption{Abbildung des Speicherkonzepte des Modells auf die Entsprechungen
+             der Spracherweiterungen}
+    \label{methoden:konzepte:speicher:tabelle}
+\end{table}
+
 \subsubsection{Kernelsprache}
+
+Die in den vorherigen Abschnitten entwickelten Konzepte werden für die
+theoretische Beschreibung der verwendeten Benchmarks in eine fiktive
+Kernel-Sprache integriert. Bei dieser Sprache handelt es sich um normales C++
+mit folgenden Erweiterungen:
+
+\begin{itemize}
+    \item Das Schlüsselwort \texttt{local} markiert Variablen und Arrays, die im
+          lokalen Speicher liegen.
+    \item Der Befehl \texttt{synchronize()} wirkt als Barriere innerhalb einer
+          Arbeitsgruppe. Es wird garantiert, dass alle vorherigen Zugriffe auf
+          den (globalen und lokalen) Speicher und Rechenoperationen
+          abgeschlossen wurden, bevor die Arbeitseinheiten die Befehle nach der
+          Barriere ausführen können.
+    \item Das Schlüsselwort \texttt{num\_groups} ist eine Variable, die die
+          Anzahl aller Arbeitsgruppen enthält.
+    \item Das Schlüsselwort \texttt{group\_idx} dient der eindeutigen
+          Identifikation einer Arbeitsgruppe in Form einer ganzen Zahl. Die
+          Indices sind fortlaufend, d.h.\ die erste Arbeitsgruppe hat den
+          Index 0, die zweite den Index 1 und die $n$-te Arbeitsgruppe den
+          Index $n - 1$.
+    \item Das Schlüsselwort \texttt{group\_dim} ist eine Variable, die die
+          Anzahl der Arbeitseinheiten einer Gruppe beinhaltet.
+    \item Das Schlüsselwort \texttt{unit\_idx} dient der eindeutigen
+          Identifikation einer Arbeitseinheit innerhalb einer Arbeitsgruppe. Die
+          erste Einheit einer Gruppe trägt den Index 0, die zweite den Index 1
+          und die $n$-te Einheit den Index $n - 1$.
+    \item Die globale Position einer Arbeitseinheit, also die eindeutige
+          Identifikation über Gruppengrenzen hinweg, lässt sich mit Hilfe der
+          vorgegebenen Schlüsselworte berechnen:\\
+          \texttt{global\_id = group\_idx * group\_dim + unit\_idx}
+    \item Vektoren werden in der Form \texttt{typZAHL} notiert, z.B.\
+          \texttt{int2} oder \texttt{float4}. Der Zugriff auf die Komponenten
+          erfolgt über den Punktoperator und die Angabe des Felds.
+          Beispielsweise sind die Komponenten des Vektors \texttt{a} vom Typ
+          \texttt{float3} durch \texttt{a.x}, \texttt{a.y} und \texttt{a.z}
+          ansprechbar.
+\end{itemize}
+
+Alle Indices sind im vorgestellten Modell eindimensional, was für die hier
+vorgestellten Benchmarks ausreicht.
 
 \subsection{zcopy-Benchmark}
 \label{methoden:zcopy}
@@ -38,19 +154,19 @@ Kernels am Beispiel von 16 Byte pro Thread.
     \begin{minted}[breaklines,breakafter=\,,escapeinside=||,fontsize=\small]{c++}
 void read_write(double2* a, double2* b, size_t num_elems)
 {
-    int stride = num_groups * group_dim;
-    int unit_id = group_dim * group_idx + unit_idx;
+    int stride = |\textbf{\textcolor{keyword-green}{num\_groups}}| * |\textbf{\textcolor{keyword-green}{group\_dim}}|;
+    int global_id = |\textbf{\textcolor{keyword-green}{group\_dim}}| * |\textbf{\textcolor{keyword-green}{group\_idx}}| + |\textbf{\textcolor{keyword-green}{unit\_idx}}|;
 
-    for(int i = unit_id; i < num_elems; i += stride)
+    for(int i = global_id; i < num_elems; i += stride)
         b[i] = a[i];
 }
 
 void write(double2* b, size_t num_elems)
 {
-    int stride = num_groups * group_dim;
-    int unit_id = group_dim * group_idx + unit_idx;
+    int stride = |\textbf{\textcolor{keyword-green}{num\_groups}}| * |\textbf{\textcolor{keyword-green}{group\_dim}}|;
+    int global_id = |\textbf{\textcolor{keyword-green}{group\_dim}}| * |\textbf{\textcolor{keyword-green}{group\_idx}}| + |\textbf{\textcolor{keyword-green}{unit\_idx}}|;
 
-    for(int i = unit_id; i < num_elems; i += stride)
+    for(int i = global_id; i < num_elems; i += stride)
         b[i] = double2{0.0, 0.0};
 }
     \end{minted}
@@ -60,6 +176,8 @@ void write(double2* b, size_t num_elems)
 
 \subsection{Reduction-Benchmark}
 \label{methoden:reduction}
+
+\subsubsection{Theoretischer Hintergrund}
 
 Die Reduktion eines Arrays ist eines der klassischen Konzepte der parallelen
 Programmierung. Mathematisch verbirgt sich dahinter das Reduzieren einer Menge
@@ -171,9 +289,93 @@ Ausführungseinheiten $E_1, \dots, E_4$.
     \label{methoden:reduction:viz}
 \end{figure}
 
-Auch im \gls{gpgpu}-Kontext ist die Reduktion früh untersucht worden; der
-Harris stellte 2007 eine optimierte Reduktion für CUDA vor
-(vgl.~\cite{harris2007}). 
+\subsubsection{GPU-Implementierung}
+
+Im \gls{gpgpu}-Kontext ist die Reduktion früh untersucht worden. So stellte
+Harris 2007 eine optimierte Reduktion für CUDA vor (vgl.~\cite{harris2007}). 
+Eine für NVIDIAs Kepler-Architektur optimierte Variante der Reduktion wurde 2014
+von Luitjens präsentiert (vgl.~\cite{luitjens2014}). Da sich Luitjens'
+Implementierung NVIDIA-spezifischer Hardware-Intrinsiken bedient, die nicht auf
+jeder im Rahmen dieser Arbeit untersuchten Plattform verfügbar sind, wird hier
+ein anderer Ansatz verwendet.
+
+Der Kernel, der die Reduktion durchführt, besteht aus zwei Stufen. Während der
+ersten Stufe iterieren $x$ Arbeitsgruppen mit jeweils $p$ Arbeitseinheiten über
+den globalen Speicher mit $n$ Elementen. Die Arbeitseinheiten führen die
+Reduktion für jedes Elementepaar aus, wobei jeder Iterationsschritt $x \cdot p$
+Elemente vom vorherigen Schritt entfernt auf den Speicher zugreift. Unter der
+Annahme, dass $n$ ein Vielfaches von $p$ ist, werden $y = \frac{n}{p}$
+Arbeitsgruppen gebraucht. Gilt $x \leq y$ unter der Bedingung, dass $y$ ein
+Vielfaches von $x$ ist, führt jede Arbeitseinheit die Reduktionsoperation im
+ersten Schritt genau $y$-mal aus. Dieses Zugriffsmuster ist als
+\textit{(grid-)stride loop} bekannt und ein häufig genutztes Konzept der
+\gls{gpgpu}-Programmierung (vgl.~\cite{harris2013} für eine Einführung und
+Erklärung der Vorteile).
+
+Während der zweiten Stufe werden die bisherigen Ergebnisse der einzelnen
+Arbeitseinheiten in den lokalen Speicher geladen. Dann führt die Hälfte der
+Arbeitseinheiten die Reduktionsoperation auf jeweils einem Elementepaar des
+lokalen Speichers aus, dann ein Viertel auf der Arbeitseinheiten auf den neuen
+Ergebnissen, usw. Am Ende gibt es pro Arbeitsgruppe genau ein Teilergebnis der
+Reduktionsoperation (also $x$ Ergebnisse), das wieder in den globalen Speicher
+geschrieben wird.
+
+Durch einen erneuten Aufruf des Kernels mit einer Arbeitsgruppe und
+$\frac{x}{2}$ Arbeitseinheiten lässt sich in einem weiteren Schritt das
+Gesamtergebnis der Reduktion berechnen. Quelltext~\ref{methoden:reduction:code}
+zeigt den Pseudo-Code des Kernels.
+
+\begin{code}
+    \begin{minted}[breaklines,breakafter=\,,escapeinside=||,fontsize=\small]{c++}
+void block_reduce(const int* data, int* result, size_t num_elems)
+{
+    |\textbf{\textcolor{keyword-green}{local}}| int shared[p];
+
+    int global_id = |\textbf{\textcolor{keyword-green}{group\_idx}}| * |\textbf{\textcolor{keyword-green}{group\_dim}}| + |\textbf{\textcolor{keyword-green}{unit\_idx}}|;
+    int tsum = data[global_id]; // vermeide neutrales Element
+    int grid_size = |\textbf{\textcolor{keyword-green}{group\_dim}}| * |\textbf{\textcolor{keyword-green}{num\_blocks}}|;
+    global_id += grid_size;
+
+    // 1. Stufe: grid-stride loop
+    while((global_id + 3 * grid_size) < num_elems)
+    {
+        tsum += data[global_id] + data[global_id + grid_size] +
+                data[global_id + 2 * grid_size] +
+                data[global_id + 3 * grid_size];
+        i += 4 * grid_size;
+    }
+
+    // verbleibende Elemente, falls n kein Vielfaches von p ist
+    while(global_id < num_elems)
+    {
+        tsum += data[global_id];
+        global_id += grid_size;
+    }
+
+    // schreibe Ergebnis in lokalen Speicher
+    shared[|\textbf{\textcolor{keyword-green}{unit\_idx}}|] = tsum; 
+    |\textbf{\textcolor{keyword-green}{synchronize}}|();
+
+    // 2. Stufe: Reduktion innerhalb der Gruppe
+    for(int bs = |\textbf{\textcolor{keyword-green}{group\_dim}}|, bsup = (|\textbf{\textcolor{keyword-green}{group\_dim}}| + 1) / 2;
+        bs > 1;
+        bs /= 2, bsup = (bs + 1) / 2)
+    {
+        bool cond = |\textbf{\textcolor{keyword-green}{unit\_idx}}| < bsup // erste Gruppenhälfte
+            && |\textbf{\textcolor{keyword-green}{unit\_idx}}| + bsup < |\textbf{\textcolor{keyword-green}{group\_dim}}|
+            && (|\textbf{\textcolor{keyword-green}{group\_idx}}| * |\textbf{\textcolor{keyword-green}{group\_dim}}| + |\textbf{\textcolor{keyword-green}{unit\_idx}}| + bsup) < num_elems;
+
+        if(cond) shared[|\textbf{\textcolor{keyword-green}{unit\_idx}}|] += shared[|\textbf{\textcolor{keyword-green}{unit\_idx}}| + bsup];
+        |\textbf{\textcolor{keyword-green}{synchronize}}|();
+    }
+    
+    // Ergebnis in globalen Speicher schreiben
+    if(|\textbf{\textcolor{keyword-green}{unit\_idx}}| == 0) result[|\textbf{\textcolor{keyword-green}{group\_idx}}|] = shared[0];
+}
+    \end{minted}
+    \caption{Reduction-Benchmark}
+    \label{methoden:reduction:code}
+\end{code}
 
 \subsection{N-Body-Benchmark}
 \label{methoden:nbody}
@@ -615,14 +817,14 @@ void tile_calculation(float4* x, float3* a)
     |\textbf{\textcolor{keyword-green}{local}}| float4 sh_position[p];
 
     float3 acc = {0.0, 0.0, 0.0};
-    int unit_id = group_idx * group_dim + unit_idx;
+    int global_id = |\textbf{\textcolor{keyword-green}{group\_idx}}| * |\textbf{\textcolor{keyword-green}{group\_dim}}| + |\textbf{\textcolor{keyword-green}{unit\_idx}}|;
 
-    float4 my_position = x[unit_id];
+    float4 my_position = x[global_id];
 
     for(int i = 0, tile = 0; i < N; i += p, ++tile)
     {
-        int idx = tile * group_dim + unit_idx;
-        sh_position[unit_idx] = x[idx];
+        int idx = tile * |\textbf{\textcolor{keyword-green}{group\_dim}}| + |\textbf{\textcolor{keyword-green}{unit\_idx}}|;
+        sh_position[|\textbf{\textcolor{keyword-green}{unit\_idx}}|] = x[idx];
         |\textbf{\textcolor{keyword-green}{synchronize}}|();
 
         acc = tile_calculation(my_position, acc);
@@ -630,7 +832,7 @@ void tile_calculation(float4* x, float3* a)
     }
 
     // Ergebnis für folgenden Integrationsschritt abspeichern
-    a[unit_id] = acc;
+    a[global_id] = acc;
 }
     \end{minted}
     \caption{Berechnung aller $N$ Interaktionen für $p$ Körper innerhalb einer
