@@ -1,5 +1,7 @@
 \documentclass[utf8,german,fpg,lot,lof,lol]{zihpub}
 
+\usepackage{algorithmicx}
+\usepackage{algpseudocode}
 \usepackage{caption}
 \usepackage{datetime}
 \usepackage{etoolbox}
@@ -14,6 +16,7 @@
 \usepackage{tkz-berge}
 
 \usetikzlibrary{arrows}
+\usetikzlibrary{arrows.meta}
 
 \usepackage{CJKutf8}
 \AtBeginDvi{\input{zhwinfonts}}
@@ -47,6 +50,8 @@
 \renewcommand*{\listlistingname}{Quelltextverzeichnis}
 
 \sisetup{locale = DE}
+\sisetup{group-separator = {.}}
+\sisetup{group-four-digits}
 
 \fancyhf{}
 \fancyhead[L]{Jan Stephan -- Innovative Spracherweiterungen}

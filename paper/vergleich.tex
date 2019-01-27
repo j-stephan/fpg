@@ -14,14 +14,14 @@ berücksichtigen.
 \label{vergleich:anforderungen:datensicht}
 
 Der effiziente Umgang mit großen Datenmengen ist seit jeher eines der
-Kernprobleme des \gls{hpc} im Allgemeinen, aber auch heterogener Systeme --
-d.h.\ unterschiedlicher Berechnungs-Hardware im selben Rechnersystem -- im
-Besonderen. Michael Wong \footnote{Mitglied des C++-Standard-Komitees,
-ehemaliger Projektleiter des XL-C++-Compilers der Firma IBM und derzeit
-Entwicklungsleiter des Unternehmens Codeplay, das unter anderem den
-SYCL-Standard implementiert} bezeichnete in einem Vortrag im November 2018 vor
-LLVM-Entwicklern die folgenden Punkte als essentielle Probleme der
-Programmierung heterogener Systeme (vgl.~\cite{wong2018}):
+Kernprobleme des \gls{hpc} im Allgemeinen und heterogener Systeme im Besonderen,
+d.h.\ unterschiedlicher Berechnungs-Hardware im selben Rechnersystem. Michael
+Wong\footnote{Mitglied des C++-Standard-Komitees, ehemaliger Projektleiter des
+XL-C++-Compilers der Firma IBM und derzeit Entwicklungsleiter des Unternehmens
+Codeplay, das unter anderem den SYCL-Standard implementiert} bezeichnete in
+einem Vortrag im November 2018 vor LLVM-Entwicklern die folgenden Punkte als
+essentielle Probleme der Programmierung heterogener Systeme
+(vgl.~\cite{wong2018}):
 
 \paragraph{Datenbewegung} 
 Die Bewegung der Daten ist stets mit Kosten verbunden. Im Allgemeinen ist damit
@@ -102,8 +102,9 @@ Abbildung~\ref{vergleich:anforderungen:datensicht:implizitebewegung}).
 \end{figure}
 
 Eine bewertende Gegenüberstellung beider Ansätze übersteigt den Rahmen dieser
-Arbeit. Stattdessen wird untersucht, in welcher Form beide Ansätze von den
-jeweiligen Spracherweiterungen unterstützt werden.
+Arbeit (und ist bisher auch in der Literatur nicht zu finden). Stattdessen wird
+untersucht, in welcher Form beide Ansätze von den jeweiligen Spracherweiterungen
+unterstützt werden.
 
 \paragraph{Datenanordnung}
 
@@ -193,6 +194,8 @@ C++-Quelltext an den auf dem System befindlichen entsprechenden Compiler
 weiter. Der Device-Quelltext wird in einem weiteren Schritt vom tatsächlichen
 Device-Compiler \texttt{cicc} in die Maschinensprache der Ziel-GPU übersetzt.
 
+TODO: Ausführungsmodell
+
 \subsubsection{Datensicht}
 \label{vergleich:cuda:datensicht}
 
@@ -246,7 +249,7 @@ Die \textit{implizite} Datenbewegung wird seit dem im Jahr 2014 erschienenen
 CUDA 6 unterstützt (vgl.~\cite{cuda2014}, S.\ 3). Der Befehl
 \mintinline{c++}{cudaMallocManaged} allokiert einen Speicherbereich, der sowohl
 vom Host als auch vom Device angesteuert werden kann. Die CUDA-Laufzeitumgebung
-sorgt dann im Hintergrund für das Kopieren der notwendigen Speicherbereiche, es
+sorgt dann im Hintergrund für das Kopieren der notwendigen Speicherbereiche. Es
 obliegt jedoch dem Programmierer, die Synchronisierung zwischen Host und Device
 auszuführen. Das in Quelltext~\ref{vergleich:cuda:datensicht:explizitebewegung}
 aufgeführte Beispiel wird dadurch zu der in
