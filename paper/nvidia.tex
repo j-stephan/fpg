@@ -1,8 +1,30 @@
 \section{Messungen auf NVIDIA-GPUs}
 \label{nvidia}
 
+\subsection{Verwendete Hard- und Software}
+
+Die hier gezeigten Benchmark-Ergebnisse wurden auf verschiedenen Knoten des
+\gls{hpc}-Systems Taurus gemessen:
+
+\begin{itemize}
+    \item Ein Knoten der gpu2 Partition mit vier GPUs des Modells Tesla K80
+    \item Einem experimentellen Knoten mit einer GPU des Modells Tesla V100 
+\end{itemize}
+
+Die Messungen fanden innerhalb der SCS5-Umgebung statt. Das verwendete
+CUDA-Modul war XXX. HIP wurde in folgender Form verwendet: XXX. Als
+SYCL-Implementierung kam ComputeCpp der Firma Codeplay in der Version XXX zum
+Einsatz.
+
 \subsection{zcopy}
 
 \subsection{Reduction}
 
 \subsection{N-Body}
+
+Ein gesonderter Vergleich ist zwischen CUDA und SYCL nötig, da das
+experimentelle Backend für NVIDIA-GPUs der ComputeCpp-Implementierung die
+Funktion \texttt{rsqrtf} für die reziproke Quadratwurzel nicht unterstützt. Da
+die äquivalente Berechnung \texttt{1.f / sqrtf} deutlich langsamer ist, wurde
+stattdessen eine schnellere, weniger genaue Implementierung der Funktion
+\texttt{rsqrtf} aus dem Quelltext des Spiels \texttt{Quake 3 Arena} übernommen.

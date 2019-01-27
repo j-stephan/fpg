@@ -1,0 +1,327 @@
+\appendix
+
+\section{CUDA-Kernel}
+
+\subsection{zcopy}
+
+\begin{code}
+    \begin{minted}[breaklines,breakafter=\,,escapeinside=||,fontsize=\small]{cuda}
+|\textbf{\textcolor{keyword-green}{template}}| <typename DataT>
+__global__ void read_write(const DataT* __restrict__ A,
+                                 DataT* __restrict__ B,
+                           std::size_t num_elems)
+{
+    auto stride = gridDim.x * blockDim.x;
+    for(auto i = blockIdx.x * blockDim.x + threadIdx.x;
+             i < elems;
+             i += stride)
+    {
+        B[i] = A[i];
+    }
+}
+    \end{minted}
+    \caption{zcopy -- read\_write -- CUDA-Implementierung}
+    \label{anhang:cuda:zcopyrw}
+\end{code}
+
+\begin{code}
+    \begin{minted}[breaklines,breakafter=\,,escapeinside=||,fontsize=\small]{cuda}
+|\textbf{\textcolor{keyword-green}{template}}| <typename DataT>
+__global__ void write(DataT* __restrict__ B, std::size_t num_elems);
+
+|\textbf{\textcolor{keyword-green}{template}}|<>
+__global__ void write<float>(float* __restrict__ B,
+                             std::size_t num_elems)
+{
+    auto stride = gridDim.x * blockDim.x;
+    for(auto i = blockIdx.x * blockDim.x + threadIdx.x;
+             i < elems;
+             i += stride)
+    {
+        B[i] = 0.f;
+    }
+}
+    \end{minted}
+    \caption{zcopy -- write -- CUDA-Implementierung (4 Byte)}
+    \label{anhang:cuda:zcopyw4}
+\end{code}
+
+\begin{code}
+    \begin{minted}[breaklines,breakafter=\,,escapeinside=||,fontsize=\small]{cuda}
+|\textbf{\textcolor{keyword-green}{template}}| <typename DataT>
+__global__ void write(DataT* __restrict__ B, std::size_t num_elems);
+
+|\textbf{\textcolor{keyword-green}{template}}|<>
+__global__ void write<double>(double* __restrict__ B,
+                              std::size_t num_elems)
+{
+    auto stride = gridDim.x * blockDim.x;
+    for(auto i = blockIdx.x * blockDim.x + threadIdx.x;
+             i < elems;
+             i += stride)
+    {
+        B[i] = 0.0;
+    }
+}
+    \end{minted}
+    \caption{zcopy -- write -- CUDA-Implementierung (8 Byte)}
+    \label{anhang:cuda:zcopyw8}
+\end{code}
+
+\begin{code}
+    \begin{minted}[breaklines,breakafter=\,,escapeinside=||,fontsize=\small]{cuda}
+|\textbf{\textcolor{keyword-green}{template}}| <typename DataT>
+__global__ void write(DataT* __restrict__ B, std::size_t num_elems);
+
+|\textbf{\textcolor{keyword-green}{template}}|<>
+__global__ void write<double2>(double2* __restrict__ B,
+                               std::size_t num_elems)
+{
+    auto stride = gridDim.x * blockDim.x;
+    for(auto i = blockIdx.x * blockDim.x + threadIdx.x;
+             i < elems;
+             i += stride)
+    {
+        B[i] = make_double2(0.0, 0.0);
+    }
+}
+    \end{minted}
+    \caption{zcopy -- write -- CUDA-Implementierung (16 Byte)}
+    \label{anhang:cuda:zcopyw16}
+\end{code}
+
+\begin{code}
+    \begin{minted}[breaklines,breakafter=\,,escapeinside=||,fontsize=\small]{cuda}
+|\textbf{\textcolor{keyword-green}{template}}| <typename DataT>
+__global__ void write(DataT* __restrict__ B, std::size_t num_elems);
+
+|\textbf{\textcolor{keyword-green}{template}}|<>
+__global__ void write<double4>(double4* __restrict__ B,
+                               std::size_t num_elems)
+{
+    auto stride = gridDim.x * blockDim.x;
+    for(auto i = blockIdx.x * blockDim.x + threadIdx.x;
+             i < elems;
+             i += stride)
+    {
+        B[i] = make_double4(0.0, 0.0, 0.0, 0.0);
+    }
+}
+    \end{minted}
+    \caption{zcopy -- write -- CUDA-Implementierung (32 Byte)}
+    \label{anhang:cuda:zcopyw32}
+\end{code}
+
+\subsection{Reduce}
+
+\subsection{N-Body}
+
+\section{HIP-Kernel}
+
+\subsection{zcopy}
+
+\begin{code}
+    \begin{minted}[breaklines,breakafter=\,,escapeinside=||,fontsize=\small]{cuda}
+|\textbf{\textcolor{keyword-green}{template}}| <typename DataT>
+__global__ void read_write(const DataT* __restrict__ A,
+                                 DataT* __restrict__ B,
+                           std::size_t num_elems)
+{
+    auto stride = |\textcolor{keyword-green}{hipGridDim\_x}| * |\textcolor{keyword-green}{hipBlockDim\_x}|;
+        for(auto i = |\textcolor{keyword-green}{hipBlockIdx\_x}| * |\textcolor{keyword-green}{hipBlockDim\_x}| + |\textcolor{keyword-green}{hipThreadIdx\_x}|;
+             i < elems;
+             i += stride)
+    {
+        B[i] = A[i];
+    }
+}
+    \end{minted}
+    \caption{zcopy -- read\_write -- HIP-Implementierung}
+    \label{anhang:hip:zcopyrw}
+\end{code}
+
+\begin{code}
+    \begin{minted}[breaklines,breakafter=\,,escapeinside=||,fontsize=\small]{cuda}
+|\textbf{\textcolor{keyword-green}{template}}| <typename DataT>
+__global__ void write(DataT* __restrict__ B, std::size_t num_elems);
+
+|\textbf{\textcolor{keyword-green}{template}}|<>
+__global__ void write<float>(float* __restrict__ B,
+                             std::size_t num_elems)
+{
+    auto stride = |\textcolor{keyword-green}{hipGridDim\_x}| * |\textcolor{keyword-green}{hipBlockDim\_x}|;
+    for(auto i = |\textcolor{keyword-green}{hipBlockIdx\_x}| * |\textcolor{keyword-green}{hipBlockDim\_x}| + |\textcolor{keyword-green}{hipThreadIdx\_x}|;
+             i < elems;
+             i += stride)
+    {
+        B[i] = 0.f;
+    }
+}
+    \end{minted}
+    \caption{zcopy -- write -- HIP-Implementierung (4 Byte)}
+    \label{anhang:hip:zcopyw4}
+\end{code}
+
+\begin{code}
+    \begin{minted}[breaklines,breakafter=\,,escapeinside=||,fontsize=\small]{cuda}
+|\textbf{\textcolor{keyword-green}{template}}| <typename DataT>
+__global__ void write(DataT* __restrict__ B, std::size_t num_elems);
+
+|\textbf{\textcolor{keyword-green}{template}}|<>
+__global__ void write<double>(double* __restrict__ B,
+                              std::size_t num_elems)
+{
+    auto stride = |\textcolor{keyword-green}{hipGridDim\_x}| * |\textcolor{keyword-green}{hipBlockDim\_x}|;
+    for(auto i = |\textcolor{keyword-green}{hipBlockIdx\_x}| * |\textcolor{keyword-green}{hipBlockDim\_x}| + |\textcolor{keyword-green}{hipThreadIdx\_x}|;
+             i < elems;
+             i += stride)
+    {
+        B[i] = 0.0;
+    }
+}
+    \end{minted}
+    \caption{zcopy -- write -- HIP-Implementierung (8 Byte)}
+    \label{anhang:hip:zcopyw8}
+\end{code}
+
+\begin{code}
+    \begin{minted}[breaklines,breakafter=\,,escapeinside=||,fontsize=\small]{cuda}
+|\textbf{\textcolor{keyword-green}{template}}| <typename DataT>
+__global__ void write(DataT* __restrict__ B, std::size_t num_elems);
+
+|\textbf{\textcolor{keyword-green}{template}}|<>
+__global__ void write<double2>(double2* __restrict__ B,
+                               std::size_t num_elems)
+{
+    auto stride = |\textcolor{keyword-green}{hipGridDim\_x}| * |\textcolor{keyword-green}{hipBlockDim\_x}|;
+    for(auto i = |\textcolor{keyword-green}{hipBlockIdx\_x}| * |\textcolor{keyword-green}{hipBlockDim\_x}| + |\textcolor{keyword-green}{hipThreadIdx\_x}|;
+             i < elems;
+             i += stride)
+    {
+        B[i] = make_double2(0.0, 0.0);
+    }
+}
+    \end{minted}
+    \caption{zcopy -- write -- HIP-Implementierung (16 Byte)}
+    \label{anhang:hip:zcopyw16}
+\end{code}
+
+\begin{code}
+    \begin{minted}[breaklines,breakafter=\,,escapeinside=||,fontsize=\small]{cuda}
+|\textbf{\textcolor{keyword-green}{template}}| <typename DataT>
+__global__ void write(DataT* __restrict__ B, std::size_t num_elems);
+
+|\textbf{\textcolor{keyword-green}{template}}|<>
+__global__ void write<double4>(double4* __restrict__ B,
+                               std::size_t num_elems)
+{
+    auto stride = |\textcolor{keyword-green}{hipGridDim\_x}| * |\textcolor{keyword-green}{hipBlockDim\_x}|;
+    for(auto i = |\textcolor{keyword-green}{hipBlockIdx\_x}| * |\textcolor{keyword-green}{hipBlockDim\_x}| + |\textcolor{keyword-green}{hipThreadIdx\_x}|;
+             i < elems;
+             i += stride)
+    {
+        B[i] = make_double4(0.0, 0.0, 0.0, 0.0);
+    }
+}
+    \end{minted}
+    \caption{zcopy -- write -- HIP-Implementierung (32 Byte)}
+    \label{anhang:hip:zcopyw32}
+\end{code}
+
+\subsection{Reduce}
+\subsection{N-Body}
+
+\section{HC-Kernel}
+
+\subsection{zcopy}
+
+\begin{code}
+    \begin{minted}[breaklines,breakafter=\,,escapeinside=||,fontsize=\small]{c++}
+[[hc]]
+template <typename DataT>
+void read_write(hc::tiled_index<1> idx, hc::array_view<DataT, 1> A,
+                hc::array_view<DataT, 1> B, std::size_t elems,
+                unsigned int tiles, unsigned int tile_size)
+{
+    auto stride = tiles * tile_size;
+    for(auto i = idx.tile[0] * tile_size + idx.local[0];
+             i < elems;
+             i += stride)
+    {
+        B[i] = A[i];
+    }
+}
+
+[[hc]]
+template <typename DataT>
+void write(hc::tiled_index<1> idx, hc::array_view<DataT, 1> B,
+           std::size_t elems, unsigned int tiles,
+           unsigned int tile_size)
+{
+    auto stride = tiles * tile_size;
+    for(auto i = idx.tile[0] * tile_size + idx.local[0];
+             i < elems;
+             i += stride)
+    {
+        B[i] = DataT{};
+    }
+}
+    \end{minted}
+    \caption{zcopy - HC-Implementierung}
+    \label{anhang:hc:zcopy}
+\end{code}
+
+\subsection{Reduce}
+\subsection{N-Body}
+
+\section{SYCL-Kernel}
+
+\subsection{zcopy}
+
+\begin{code}
+    \begin{minted}[breaklines,breakafter=\,,escapeinside=||,fontsize=\small]{c++}
+template <typename DataT>
+struct reader_writer
+{
+    cl::sycl::accessor<DataT, 1,
+                       cl::sycl::access::mode::read,
+                       cl::sycl::access::target::global_buffer> A;
+    cl::sycl::accessor<DataT, 1,
+                       cl::sycl::access::mode::discard_write,
+                       cl::sycl::access::target::global_buffer> B;
+
+    auto operator()(cl::sycl::nd_item<1> my_item) -> void
+    {
+        auto stride = my_item.get_group_range(0) *
+                      my_item.get_local_range(0);
+        for(auto i = my_item.get_global_id(0); i < elems; i += stride)
+        {
+            B[i] = A[i];
+        }
+    }
+};
+
+template <typename DataT>
+struct writer
+{
+    cl::sycl::accessor<DataT, 1,
+                       cl::sycl::access::mode::discard_write,
+                       cl::sycl::access::target::global_buffer> B;
+
+    auto operator()(cl::sycl::nd_item<1> my_item) -> void
+    {
+        auto stride = my_item.get_group_range(0) *
+                      my_item.get_local_range(0);
+        for(auto i = my_item.get_global_id(0); i < elems; i += stride)
+        {
+            B[i] = DataT{};
+        }
+    }
+};
+    \end{minted}
+    \caption{zcopy -- SYCL-Implementierung}
+    \label{anhang:sycl:zcopy}
+\end{code}
+
+\subsection{Reduce}
+\subsection{N-Body}

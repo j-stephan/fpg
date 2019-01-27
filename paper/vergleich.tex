@@ -138,16 +138,15 @@ verwendeten Vergleichskriterien dar, bedürfen jedoch noch einer Ergänzung:
 
 \paragraph{Aufgabengraphen}
 
-Viele Anwendungen des \gls{hpc}-Umfelds, wie etwa im Bereich des maschinellen
-Lernens oder wissenschaftlicher Berechnungen, haben eine iterative Struktur. Die
-Abfolge und Abhängigkeiten einzelner \textit{Kernel} lassen sich in Form eines
-Graphen darstellen (siehe
+Die Abfolge und Abhängigkeiten einzelner \textit{Kernel} lassen sich in Form
+eines Graphen darstellen (siehe
 Abbildung~\ref{vergleich:anforderungen:aufgabensicht:graph}). Eine effiziente
-Implementierung dieser Graphen setzt voraus, dass Kernel \textit{asynchron} --
-sowohl im Hinblick auf die CPU als auch untereinander -- und \textit{parallel}
-auf der gleichen GPU ausgeführt werden können. Im Rahmen dieser Arbeit wird
-deshalb ebenfalls untersucht, welche Mittel die einzelnen Spracherweiterungen
-zur Verfügung stellen, um Aufgabengraphen zu implementieren.
+Ausnutzung der Parallelität voneinander unabhängiger Aufgaben setzt voraus,
+dass Kernel \textit{asynchron} -- sowohl im Hinblick auf die CPU als auch
+untereinander -- und \textit{parallel} auf der gleichen GPU ausgeführt werden
+können. Im Rahmen dieser Arbeit wird deshalb ebenfalls untersucht, welche Mittel
+die einzelnen Spracherweiterungen zur Verfügung stellen, um Aufgabengraphen zu
+implementieren.
 
 \begin{figure}[htb]
     \centering
@@ -194,7 +193,43 @@ C++-Quelltext an den auf dem System befindlichen entsprechenden Compiler
 weiter. Der Device-Quelltext wird in einem weiteren Schritt vom tatsächlichen
 Device-Compiler \texttt{cicc} in die Maschinensprache der Ziel-GPU übersetzt.
 
-TODO: Ausführungsmodell
+\subsubsection{Ausführungsmodell}
+
+Ein \textit{thread} ist die kleinste selbstständige Einheit, die eine Aufgabe
+ausführen kann und direkt auf einen Hardware-Thread eines Multiprozessors
+abbildbar. \textit{Threads} sind auf der Hardware-Ebene in \textit{warps}
+(Gruppen aus 32 Threads) zusammengefasst, die synchron die selben Instruktionen
+ausführen. \textit{Warps} entsprechen damit Registern der CPU, die das Modell
+\gls{simd} unterstützen, sind im Vergleich zu diesen allerdings flexibler
+programmierbar. Dieses Hardware-Modell wird von NVIDIA auch als \gls{simt}
+bezeichnet.
+
+Die nächsthöhere Ebene bilden \textit{blocks}, die aus bis zu \num{1024}
+\textit{threads} in drei Dimensionen bestehen können (das Produkt der
+\textit{thread}-Zahl in $x$-, $y$- und $z$-Richtung darf \num{1024} also nicht
+übersteigen). Während die Anzahl der \textit{threads} in diesem Rahmen frei
+wählbar ist, bedingt die feste \textit{warp}-Größe, dass eine
+\textit{block}-Größe ein Vielfaches von 32 sein sollte, da andernfalls
+überzählige \textit{threads} versteckt ausgeführt werden. Ein \textit{block}
+wird genau einem Multiprozessor zugeordnet und von diesem ausgeführt. Sind mehr
+\textit{blocks} als Multiprozessoren vorhanden, werden \textit{blocks}, die
+z.B.\ durch Speicherzugriffe blockiert sind, von ihren Multiprozessoren entfernt
+und durch wartende \textit{blocks} ersetzt. Dieser Kontextwechsel geschieht auf
+einer GPU deutlich schneller als auf einer CPU und ist nur mit wenigen Zyklen
+verbunden.
+
+Alle \textit{threads} eines \textit{blocks} können untereinander über den
+Speicher des Multiprozessors kommunizieren (\textit{shared memory}). Barrieren
+ermöglichen die Synchronisation zwischen \textit{warps}, während
+\textit{threads} innerhalb eines \textit{warps} durch spezielle Intrinsiken
+kommunizieren können.
+
+Die Gesamtheit der \textit{blocks} bildet das \textit{grid}, das ebenfalls bis
+zu drei Dimensionen umfassen kann. Eine Synchronisierung zwischen
+\textit{blocks} ist mit CUDA selbst nicht möglich, allerdings ermöglicht
+das im Zusammenhang mit CUDA 9 eingeführte (vgl.~\cite{cuda2018}, S.\ 3)
+\gls{api} \textit{cooperative groups} eine \textit{grid}-weite Barriere.
+(vgl.~\cite{cudaguide}, Abschnitt 2.2)
 
 \subsubsection{Datensicht}
 \label{vergleich:cuda:datensicht}
@@ -344,29 +379,206 @@ Memory\grqq)
 
 \paragraph{Datenaffinität}
 
+Die explizite Datenbewegung ordnet die kopierten Daten automatisch der
+\textit{aktiven} GPU zu. Der CUDA-Kontext kennt generell nur ein aktives Device;
+will man in einem Multi-GPU-System auf eine andere GPU wechseln, geschieht dies
+durch den manuellen Wechsel mit dem Befehl \texttt{cudaSetDevice} (siehe
+Quelltext~\ref{vergleich:cuda:datensicht:setdevice}).
+
+Dieses Verfahren gilt zum Teil auch für die implizite Datenbewegung. Speicher,
+der mit dem Befehl \texttt{cudaMallocManaged} reserviert wurde, wird bei allen
+NVIDIA-GPU-Architekturen bis einschließlich \textit{Maxwell} nur zwischen dem
+Host und dem zum Zeitpunkt der Reservierung aktiven Device ausgetauscht. Ab der
+\textit{Kepler}-Architektur wird der Speicher dagegen auf allen GPUs sichtbar
+und nach Bedarf auf die GPU kopiert, welche die Daten benötigt.
+(vgl.~\cite{cudaguide}, Abschnitt K.1.5)
+
+\begin{code}
+    \begin{minted}[fontsize=\small]{c++}
+auto count = 0;
+cudaGetDeviceCount(&count); // Zahl der GPUs abfragen
+
+cudaSetDevice(0); // Device 0 aktiv
+cudaMemcpy(..., cudaMemcpyHostToDevice); // kopieren auf Device 0
+
+cudaSetDevice(1); // Device 1 aktiv
+cudaMemcpy(..., cudaMemcpyHostToDevice); // kopieren auf Device 1
+    \end{minted}
+    \caption{Setzen der aktiven GPU mit CUDA}
+    \label{vergleich:cuda:datensicht:setdevice}
+\end{code}
+
 \paragraph{Datenlokalität}
+
+CUDA kennt sieben Ebenen innerhalb der GPU-Speicherhierarchie
+(vgl.~\cite{cudaguide}, Abschnitt 5.3.2).
+
+\textit{Global memory} ist der Hauptspeicher der GPU und für alle
+Multiprozessoren sichtbar. Die Zugriffe sind jedoch zeitaufwendig.
+
+Zugriffe auf den \textit{global memory} erfolgen über L1- (pro Multiprozessor)
+und L2-Caches (alle Multiprozessoren). Die Caches lassen sich vom Programmierer
+nicht direkt ansteuern.
+
+\textit{Constant memory} ist ein spezieller Cache, der vom Programmierer selbst
+befüllt werden muss. Er ermöglicht deutlich schnellere Speicherzugriffe, wenn
+alle \textit{threads} eines \textit{warps} gleichzeitig auf das gleiche Datum
+zugreifen.
+
+Operationen, die die Textureinheiten der GPU verwenden, können über die
+Textur-Caches der GPU lesend auf den \textit{global memory} zugreifen. Diese
+Caches sind für häufige zweidimensionale Speicherzugriffe auf benachbarte Zeilen
+und Spalten optimiert. Sie sind vom Programmierer mittels der Intrinsik
+\texttt{\_\_ldg} direkt ansprechbar oder können implizit durch die in CUDA
+enthaltenen Texturbefehle genutzt werden.
+
+\textit{Shared memory} ist ein spezieller L1-Cache, der direkt vom Programmierer
+lesbar und beschreibbar ist. Der \textit{shared memory} ist in seiner Kapazität
+sehr eingeschränkt (er umfasst nur einige KiB), ermöglicht dem Programmierer
+aber sehr schnelle Zugriffe sowie die Kommunikation zwischen \textit{threads}
+eines \textit{blocks}.
+
+Die Register des Multiprozessors werden \textit{threads} nach Bedarf zugeordnet
+und sind vom Programmierer nicht direkt ansprechbar.
+
+\textit{Local memory} ist \textit{thread}-lokaler \textit{global memory}. In
+diesem werden lokale Variablen, die nicht mehr in die Register passen
+(weil deren Anzahl erschöpft ist), oder Arrays unbekannter Länge automatisch
+untergebracht. Da der \textit{local memory} versteckt im \textit{global memory}
+liegt, ist seine Nutzung aufgrund der langen Zugriffszeiten üblicherweise
+unerwünscht.
 
 \subsubsection{Aufgabensicht}
 
 \paragraph{Aufgabengraphen}
 
+Aufgabengraphen lassen sich in CUDA auf zwei Arten implementieren. Der
+herkömmliche Weg ist die Verwendung von \textit{streams}. Diese können als
+Warteschlangen für Aufgaben (Speicherbewegungen, Kernel-Ausführungen) gesehen
+werden und sind untereinander und in Bezug auf den Host asynchron. Das heißt,
+dass verschiedene Kernel in getrennten \textit{streams} parallel auf der GPU
+ausgeführt werden können (entsprechende Hardware-Ressourcen vorausgesetzt).
+Innerhalb eines \textit{streams} sind alle Aufgaben immer serialisiert, zwei
+Kernel im selben \textit{stream} werden also immer nacheinander ausgeführt.
+
+Die Kommunikation bzw.\ Synchronisation zwischen \textit{streams} erfolgt über
+\textit{events}. \textit{Events} werden z.B.\ durch das Beenden eines Kernels
+ausgelöst. Ist ein Kernel eines anderen \textit{streams} von diesem abhängig,
+lässt sich durch das Warten auf dieses \textit{event} der \textit{stream}
+blockieren, bis die Ausführung fortgesetzt werden kann.
+
+Der Quelltext~\ref{vergleich:cuda:aufgabensicht:streams} zeigt die
+Implementierung des Beispiel-Graphen
+in Abbildung~\ref{vergleich:anforderungen:aufgabensicht:graph} mit
+\textit{streams}.
+
+\begin{code}
+    \begin{minted}[fontsize=\small]{c++}
+        A<<<..., stream1>>>();
+        // eventA wird ausgelöst, sobald A fertig ist
+        cudaEventRecord(eventA, stream1);
+
+        B<<<..., stream1>>>(); // wartet automatisch auf A
+
+        // stream2 wartet auf eventA
+        cudaStreamWaitEvent(stream2, eventA);
+        // C kann jetzt ausgeführt werden
+        C<<<..., stream2>>>();
+        // eventC wird ausgelöst, sobald C fertig ist
+        cudaEventRecord(eventC, stream2);
+
+        // stream1 wartet auf eventC
+        cudaStreamEvent(stream1, eventC);
+        D<<<..., stream1>>>(); // wartet automatisch auf B
+    \end{minted}
+    \caption{Aufgabengraph mit \textit{streams}}
+    \label{vergleich:cuda:aufgabensicht:streams}
+\end{code}
+
+Der \textit{stream}-Ansatz hat den Nachteil, dass bei iterativen Verfahren, die
+das mehrfache Ausführen des Graphen erfordern, durch das ständige Starten der
+Kernel und das manuelle Blockieren der \textit{streams} viel Overhead erzeugt
+wird. Die mit dem 2018 veröffentlichten CUDA 10 eingeführten
+\textit{CUDA Graphs} (vgl.~\cite{cuda10rel}, S.\ 4) sollen dieses Problem lösen
+(vgl.~\cite{ramarao2018} für eine Einführung).
+
+Aufgabengraphen lassen sich mit diesem \gls{api} direkt implementieren.
+Quelltext~\ref{vergleich:cuda:aufgabensicht:graph} zeigt die
+Abbildung~\ref{vergleich:anforderungen:aufgabensicht:graph} entsprechende
+Implementierung. 
+
+\begin{code}
+    \begin{minted}[fontsize=\small]{c++}
+        cudaGraphCreate(&graph);
+
+        // Abhängigkeiten definieren
+        cudaGraphAddNode(graph, A, {}, ...);
+        cudaGraphAddNode(graph, B, {A}, ...);
+        cudaGraphAddNode(graph, C, {A}, ...);
+        cudaGraphAddNode(graph, D, {B, C}, ...);
+
+        // Graph-Instanz erzeugen
+        cudaGraphInstantiate(&instance, graph);
+
+        // Graph-Instanz auf stream ausführen
+        cudaGraphLaunch(instance, stream);
+    \end{minted}
+    \caption{Aufgabengraph mit \textit{CUDA Graphs}}
+    \label{vergleich:cuda:aufgabensicht:graph}
+\end{code}
+
 \subsection{HIP}
+
+\subsubsection{Übersicht}
+
+AMDs \gls{hip}-\gls{api} ist als portable Alternative zu CUDA gedacht und de
+facto ein Klon des CUDA-\gls{api}, bei dem fast jeder CUDA-Befehl
+\texttt{cudaCmd} seine genaue Entsprechung im \gls{hip}-Befehl \texttt{hipCmd}
+findet. Tatsächlich werden \gls{hip}-Quelltexte, die für eine NVIDIA-GPU
+kompiliert werden sollen, von einem einfachen Skript wieder in CUDA-Quelltexte
+umgewandelt. Diese werden dann vom \texttt{nvcc}-Compiler übersetzt.
+
+Die in den vorherigen Abschnitten für CUDA dargestellten Prinzipien gelten daher
+weitestgehend auch für \gls{hip}; vorhandene Unterschiede werden in den
+folgenden Abschnitten aufgeführt.
+
+\gls{hip} für AMD-GPUs ist eine dünne Schicht über AMDs eigentlichem
+\gls{gpgpu}-\gls{api}, \gls{hc}, das in Abschnitt~\ref{vergleich:hc} vorgestellt
+wird.
 
 \subsubsection{Datensicht}
 
 \paragraph{Datenbewegung}
 
+Die implizite Datenbewegung, die mit \texttt{cudaMallocManaged} möglich ist,
+hat gegenwärtig kein \gls{hip}-Äquivalent. Programmierer haben daher nur die
+Möglichkeit der expliziten Datenbewegung.
+
 \paragraph{Datenanordnung}
 
-\paragraph{Datenaffinität}
+Zweidimensionaler Speicher kann auf CUDA-GPUs mit \texttt{cudaMallocPitch} in
+einer optimierten Anordnung reserviert werden. Dieser Befehl wird derzeit nicht
+in \gls{hip} abgebildet. Gleiches gilt für \texttt{cudaArray}s, die in ihrer
+Anordnung für den Textur-Cache optimiert sind.
 
 \paragraph{Datenlokalität}
+
+Die Textur-Einheiten und damit der Textur-Cache der GPU werden von \gls{hip} zur
+Zeit nur eingeschränkt unterstützt.
 
 \subsubsection{Aufgabensicht}
 
 \paragraph{Aufgabengraphen}
 
+Aufgabengraphen lassen sich in \gls{hip} nur über \textit{streams}
+implementieren, \textit{CUDA Graphs} werden momentan nicht unterstützt.
+
 \subsection{HC}
+\label{vergleich:hc}
+
+\subsubsection{Übersicht}
+
+\subsubsection{Ausführungsmodell}
 
 \subsubsection{Datensicht}
 
@@ -383,6 +595,11 @@ Memory\grqq)
 \paragraph{Aufgabengraphen}
 
 \subsection{SYCL}
+\label{vergleich:sycl}
+
+\subsubsection{Übersicht}
+
+\subsubsection{Ausführungsmodell}
 
 \subsubsection{Datensicht}
 
@@ -398,3 +615,5 @@ Memory\grqq)
 
 \paragraph{Aufgabengraphen}
 
+\subsection{Zusammenfassung}
+\label{vergleich:zusammenfassung}
