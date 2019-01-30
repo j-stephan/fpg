@@ -7,14 +7,15 @@ Die hier gezeigten Benchmark-Ergebnisse wurden auf verschiedenen Knoten des
 \gls{hpc}-Systems Taurus gemessen:
 
 \begin{itemize}
-    \item Ein Knoten der gpu2 Partition mit vier GPUs des Modells Tesla K80
-    \item Einem experimentellen Knoten mit einer GPU des Modells Tesla V100 
+    \item Ein Knoten der gpu2 Partition mit zwei GPUs des Modells Tesla K20x
+    \item Einem experimentellen Knoten mit je einer GPU der Modelle Tesla P100
+          und Tesla V100
 \end{itemize}
 
 Die Messungen fanden innerhalb der SCS5-Umgebung statt. Das verwendete
-CUDA-Modul war XXX. HIP wurde in folgender Form verwendet: XXX. Als
-SYCL-Implementierung kam ComputeCpp der Firma Codeplay in der Version XXX zum
-Einsatz.
+CUDA-Modul war CUDA/9.2.88. HIP wurde in folgender Form verwendet: TODO. Als
+SYCL-Implementierung kam ComputeCpp der Firma Codeplay in der Version 1.0.4 für
+CentOS zum Einsatz.
 
 \subsection{zcopy}
 
@@ -27,4 +28,26 @@ experimentelle Backend für NVIDIA-GPUs der ComputeCpp-Implementierung die
 Funktion \texttt{rsqrtf} für die reziproke Quadratwurzel nicht unterstützt. Da
 die äquivalente Berechnung \texttt{1.f / sqrtf} deutlich langsamer ist, wurde
 stattdessen eine schnellere, weniger genaue Implementierung der Funktion
-\texttt{rsqrtf} aus dem Quelltext des Spiels \texttt{Quake 3 Arena} übernommen.
+\texttt{rsqrtf} aus dem Quelltext des Spiels \textit{Quake 3 Arena} übernommen
+(siehe Quelltext~\ref{nvidia:nbody:qrsqrt} für eine normale
+C++-Implementierung).
+
+\begin{code}
+    \begin{minted}[fontsize=\small]{c++}
+auto Q_rsqrt(float number) -> float
+{
+    auto x2 = number * 0.5f;
+    auto y = number;
+    auto i = *(reinterpret_cast<std::int32_t*>(&y));
+
+    i = 0x5f3759df - (i >> 1);
+
+    y = *(reinterpret_cast<float*>(&i));
+    y *= 1.5f - (x2 * y * y);
+
+    return y;
+}
+    \end{minted}
+    \caption{Quake-3-Implementierung der rsqrt-Funktion}
+    \label{nvidia:nbody:qrsqrt}
+\end{code}

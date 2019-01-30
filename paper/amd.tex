@@ -7,19 +7,52 @@ Die hier gezeigten Benchmark-Ergebnisse wurden auf einem Rechner mit der
 folgenden Hardware gemessen:
 
 \begin{itemize}
-    \item CPU: XXX
-    \item GPU: XXX
-    \item RAM: XXX
+    \item CPU: AMD Ryzen Threadripper 1950X
+          \begin{itemize}
+              \item 16 Kerne
+              \item 32 virtuelle Kerne
+              \item maximaler Takt: \SI{3,4}{\giga\hertz}
+          \end{itemize}
+    \item GPU: AMD Radeon RX Vega 64
+          \begin{itemize}
+              \item 64 Multiprozessoren
+              \item 64 Kerne pro Multiprozessor (insgesamt \num{4096} Kerne)
+              \item maximaler Takt: \SI{1536}{\mega\hertz}
+              \item \SI{8}{\gibi\byte} HBM2-Speicher
+              \item Speicherbusbreite: \SI{2048}{\bit}
+              \item Speicherbandbreite: \SI{483,3}{\gibi\byte\per\second}
+              \item Speichertakt: \SI{945}{\mega\hertz}
+          \end{itemize}
+      \item RAM: \SI{64}{\gibi\byte}
 \end{itemize}
 
-Das verwendete Betriebssystem war Ubuntu 16.04 mit der Linux-Kernel-Version XXX.
-Für die \gls{gpgpu}-Programmierung kamen die mit der \gls{rocm}-Version XXX
-mitgelieferten HIP- und HC-Implementierungen zum Einsatz. Derzeit existiert
-keine auf AMD-GPUs lauffähige SYCL-Implementierung, weswegen SYCL in den
-Ergebnissen nicht berücksichtigt wird.
+Das verwendete Betriebssystem war Ubuntu 16.04 mit der Linux-Kernel-Version
+4.15. Für die \gls{gpgpu}-Programmierung kamen die mit der \gls{rocm}-Version
+2.0.89 mitgelieferten HIP- und HC-Implementierungen zum Einsatz.
 
 \subsection{zcopy}
 
 \subsection{Reduction}
 
 \subsection{N-Body}
+
+\subsubsection{Implementierung}
+
+Die theoretische Funktion~\ref{methoden:nbody:gpu:bodybodyinteraction}, die die
+Interaktion zwischen zwei Körpern berechnet, wurde direkt in beiden Sprachen
+umgesetzt. Durch den Einsatz von \gls{fma}-Operationen werden die benötigten
+\gls{flops} für die Berechnung des Skalarprodukts sowie der Beschleunigung
+verringert. Die inverse Wurzel wird durch die \texttt{rsqrt}-Funktion berechnet.
+Die Quelltexte~\ref{anhang:hip:bodybodyinteraction} (HIP) und
+\ref{anhang:hc:bodybodyinteraction} (HC) im Anhang dieser Arbeit zeigen die
+konkrete Implementierung.
+
+Die theoretischen Funktionen~\ref{methoden:nbody:gpu:tilecalculation} und
+\ref{methoden:nbody:gpu:calcforces} wurden zusammengefasst, da erstere
+nur aus einer kurzen Schleife besteht. Überdies wurde der Compiler angewiesen,
+die Schleife auszurollen (siehe auch den nächsten Abschnitt). Diese
+Implementierungen finden sich in den angehängten
+Quelltexten~\ref{anhang:hip:forcecalculation} (HIP) bzw.
+\ref{anhang:hc:forcecalculation} (HC).
+
+\subsubsection{Optimierung und Auswertung}
