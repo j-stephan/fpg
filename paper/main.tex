@@ -14,9 +14,18 @@
 \usepackage{tcolorbox}
 \usepackage{tikz}
 \usepackage{tkz-berge}
+\usepackage{xintexpr} % weil PGFPlots zu dämlich für 1024 ist
 
 \usetikzlibrary{arrows}
 \usetikzlibrary{arrows.meta}
+
+\pgfplotsset{
+    /pgfplots/vegamax/.style = {
+        legend image code/.code = {
+            \draw[solid,thick,red](-0.05cm,0cm) -- (0.3cm, 0cm);
+        }
+    }
+}
 
 \usepackage{CJKutf8}
 \AtBeginDvi{\input{zhwinfonts}}
@@ -71,8 +80,6 @@
 \include{amd}
 \include{oekosysteme}
 \include{fazit}
-
-\listoflistings
 
 \include{anhang}
 

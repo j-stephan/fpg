@@ -56,3 +56,287 @@ Quelltexten~\ref{anhang:hip:forcecalculation} (HIP) bzw.
 \ref{anhang:hc:forcecalculation} (HC).
 
 \subsubsection{Optimierung und Auswertung}
+
+Eine einfache Optimierung ist das Ausrollen der Schleife, die nacheinander die
+Interaktionen berechnet. Dadurch erhöht sich der Registerbedarf pro Thread, der
+Overhead, der durch Verzweigungsinstruktionen anfällt, wird jedoch verringert.
+Dieser Effekt ist deutlich in den Abbildungen~\ref{amd:nbody:unroll-hc} und
+\ref{amd:nbody:unroll-hip} zu sehen:  durch die Bestimmung eines besseren
+Ausrollfaktors lassen sich in diesem Benchmark bei einer festen Kachelgröße von
+$p = 256$ knapp \num{1000} GFLOPS mehr Durchsatz gewinnen. Anhand dieser Messung
+wurde für den weiteren Verlauf der Messungen ein Ausrollfaktor von 8 festgelegt.
+
+\begin{figure}
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {Ausrollen -- HC},
+            xlabel = {Ausrollfaktor},
+            ylabel = {GFLOPS},
+            xmode = log,
+            log basis x = 2,
+            xmin = 1, xmax = 512,
+            xtick = {1,2,4,8,16,32,64,128,256,512},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = outer north east,
+            no markers,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = count, y = gflops-hc, col sep = semicolon]
+                           {data/nbody-amd-unroll-524288.csv};
+            \addlegendentry{$n = 524.288$} 
+
+            \addplot table [x = count, y = gflops-hc, col sep = semicolon]
+                           {data/nbody-amd-unroll-65536.csv};
+            \addlegendentry{$n = 65.536$} 
+
+            \addplot table [x = count, y = gflops-hc, col sep = semicolon]
+                           {data/nbody-amd-unroll-8192.csv};
+            \addlegendentry{$n = 8.192$} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{Performanzgewinn durch das Ausrollen der Schleife (HC)}
+    \label{amd:nbody:unroll-hc}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {Ausrollen -- HIP},
+            xlabel = {Ausrollfaktor},
+            ylabel = {GFLOPS},
+            xmode = log,
+            log basis x = 2,
+            xmin = 1, xmax = 512,
+            xtick = {1,2,4,8,16,32,64,128,256,512},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = outer north east,
+            no markers,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = count, y = gflops-hip, col sep = semicolon]
+                           {data/nbody-amd-unroll-524288.csv};
+            \addlegendentry{$n = 524.288$} 
+
+            \addplot table [x = count, y = gflops-hip, col sep = semicolon]
+                           {data/nbody-amd-unroll-65536.csv};
+            \addlegendentry{$n = 65.536$} 
+
+            \addplot table [x = count, y = gflops-hip, col sep = semicolon]
+                           {data/nbody-amd-unroll-8192.csv};
+            \addlegendentry{$n = 8.192$} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{Performanzgewinn durch das Ausrollen der Schleife (HIP)}
+    \label{amd:nbody:unroll-hip}
+\end{figure}
+
+Der nächste performanzrelevante Faktor ist die Größe der Kacheln selbst. Aus den
+in den Abbildungen~\ref{amd:nbody:tilesize-hc} und \ref{amd:nbody:tilesize-hip}
+dargestellten Messergebnissen wird ersichtlich, dass die Kachelgröße für den
+Benchmark weniger wichtig ist; relevante Unterschiede sind nur bei großen
+Kachelgrößen und wenigen Elementen sichtbar. Für den weiteren Messverlauf wird
+daher eine Kachelgröße von $p = 256$ angenommen.
+
+\begin{figure}
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {Kachelgrößen -- HC},
+            xlabel = {Kachelgröße},
+            ylabel = {GFLOPS},
+            xmode = log,
+            log basis x = 2,
+            xtick = {64,128,256,512,1024},
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = outer north east,
+            no markers,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = tilesize, y = gflops-hc, col sep = semicolon]
+                           {data/nbody-amd-tilesize-524288.csv};
+            \addlegendentry{$n = 524.288$} 
+
+            \addplot table [x = tilesize, y = gflops-hc, col sep = semicolon]
+                           {data/nbody-amd-tilesize-65536.csv};
+            \addlegendentry{$n = 65.536$} 
+
+            \addplot table [x = tilesize, y = gflops-hc, col sep = semicolon]
+                           {data/nbody-amd-tilesize-8192.csv};
+            \addlegendentry{$n = 8.192$} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{Performanz bei verschiedenen Kachelgrößen (HC)}
+    \label{amd:nbody:tilesize-hc}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {Kachelgrößen -- HIP},
+            xlabel = {Kachelgröße},
+            ylabel = {GFLOPS},
+            xmode = log,
+            log basis x = 2,
+            xtick = {64,128,256,512,1024},
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = outer north east,
+            no markers,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = tilesize, y = gflops-hip, col sep = semicolon]
+                           {data/nbody-amd-tilesize-524288.csv};
+            \addlegendentry{$n = 524.288$} 
+
+            \addplot table [x = tilesize, y = gflops-hip, col sep = semicolon]
+                           {data/nbody-amd-tilesize-65536.csv};
+            \addlegendentry{$n = 65.536$} 
+
+            \addplot table [x = tilesize, y = gflops-hip, col sep = semicolon]
+                           {data/nbody-amd-tilesize-8192.csv};
+            \addlegendentry{$n = 8.192$} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{Performanz bei verschiedenen Kachelgrößen (HIP)}
+    \label{amd:nbody:tilesize-hip}
+\end{figure}
+
+Mit der experimentell ermittelten Konfiguration lässt sich ein direkter
+Vergleich zwischen \gls{hc} und \gls{hip} anstellen. Die
+Abbildung~\ref{amd:nbody:comparison} zeigt, dass die Performanz bei beiden
+\gls{api}s nahezu identisch ist. Der Blick in den generierten Maschinen-Code
+zeigt, dass der \texttt{hcc}-Compiler in der Lage ist, für beide Varianten ein
+identisches Ergebnis zu erzeugen (siehe Quelltexte~\ref{amd:nbody:isahc} und
+\ref{amd:nbody:isahip}).
+
+\begin{figure}
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {Leistungsvergleich -- HC und HIP},
+            xlabel = {$n$},
+            ylabel = {GFLOPS},
+            xtick = data,
+            xmode = log,
+            log basis x = 2,
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = outer north east,
+            no markers,
+            /pgf/number format/.cd, use comma,
+            ybar,
+            width = 0.75\textwidth,
+            scale only axis,
+            ymin = 0, ymax = 13000,
+            extra y ticks = 12583,
+            extra y tick labels = {},
+            extra y tick style={grid=major, major grid style={solid,thick,draw=red}},
+            scaled y ticks = false,
+            ylabel near ticks,
+            xlabel near ticks
+        ]
+            \addplot table [x = n, y = gflops-hc, col sep = semicolon]
+                           {data/nbody-amd.csv};
+            \addlegendentry{HC} 
+
+            \addplot table [x = n, y = gflops-hip, col sep = semicolon]
+                           {data/nbody-amd.csv};
+            \addlegendentry{HIP} 
+
+            \addlegendimage{vegamax}
+            \addlegendentry{Max.}
+        \end{axis}
+    \end{tikzpicture}
+    \caption{Leistungsvergleich zwischen HC und HIP}
+    \label{amd:nbody:comparison}
+\end{figure}
+
+\begin{figure}
+    \begin{minipage}{0.5\textwidth}
+        \centering
+        \begin{minted}[fontsize=\footnotesize]{text}
+ds_read2_b64 v[14:17], v10 offset1:1
+v_add_u32_e32 v9, 64, v9
+s_waitcnt lgkmcnt(0)
+v_sub_f32_e32 v16, v16, v5
+v_sub_f32_e32 v15, v15, v4
+v_fma_f32 v18, v16, v16, s20
+v_sub_f32_e32 v14, v14, v3
+v_fma_f32 v18, v15, v15, v18
+v_fma_f32 v18, v14, v14, v18
+v_mul_f32_e32 v19, v18, v18
+v_mul_f32_e32 v18, v18, v19
+v_cmp_gt_f32_e32 vcc, s21, v18
+v_mov_b32_e32 v19, s22
+v_cndmask_b32_e32 v20, 1.0, v19, vcc
+v_mul_f32_e32 v18, v18, v20
+v_rsq_f32_e32 v18, v18
+v_mov_b32_e32 v20, s23
+v_cndmask_b32_e32 v21, 1.0, v20, vcc
+v_mul_f32_e32 v18, v21, v18
+v_mul_f32_e32 v17, v17, v18
+v_fma_f32 v18, v14, v17, v11
+v_fma_f32 v15, v15, v17, v12
+v_fma_f32 v16, v16, v17, v13                   
+        \end{minted}
+        \captionof{listing}{Maschinencode des HC-Kernels}
+        \label{amd:nbody:isahc}
+    \end{minipage}
+    %
+    \begin{minipage}{0.5\textwidth}
+        \centering
+        \begin{minted}[fontsize=\footnotesize]{text}
+ds_read2_b64 v[14:17], v9 offset1:1
+v_add_u32_e32 v10, 64, v10
+s_waitcnt lgkmcnt(0)
+v_sub_f32_e32 v16, v16, v5
+v_sub_f32_e32 v15, v15, v4
+v_fma_f32 v18, v16, v16, s16
+v_sub_f32_e32 v14, v14, v3
+v_fma_f32 v18, v15, v15, v18
+v_fma_f32 v18, v14, v14, v18
+v_mul_f32_e32 v19, v18, v18
+v_mul_f32_e32 v18, v18, v19
+v_cmp_gt_f32_e32 vcc, s17, v18
+v_mov_b32_e32 v19, s18
+v_cndmask_b32_e32 v20, 1.0, v19, vcc
+v_mul_f32_e32 v18, v18, v20
+v_rsq_f32_e32 v18, v18
+v_mov_b32_e32 v20, s19
+v_cndmask_b32_e32 v21, 1.0, v20, vcc
+v_mul_f32_e32 v18, v21, v18
+v_mul_f32_e32 v17, v17, v18
+v_fma_f32 v18, v14, v17, v11
+v_fma_f32 v15, v15, v17, v12
+v_fma_f32 v16, v16, v17, v13
+        \end{minted}
+        \captionof{listing}{Maschinencode des HIP-Kernels}
+        \label{amd:nbody:isahip}
+    \end{minipage}
+\end{figure}
+
+Beide \gls{api}s erreichen jedoch nicht einmal die Hälfte der theoretisch
+möglichen FLOPS.
