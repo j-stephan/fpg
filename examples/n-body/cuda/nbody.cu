@@ -185,7 +185,7 @@ auto main() -> int
 
     std::cout << "block_size;n;time_ms;gflops" << std::endl;
 
-    for(auto n = 1024ul; n <= 524288ul; n *= 2ul)
+    for(auto n = 2048ul; n <= 524288ul; n *= 2ul)
     {
         auto old_positions = std::vector<float4>{};
         auto new_positions = std::vector<float4>{};
@@ -261,6 +261,8 @@ auto main() -> int
     CHECK(cudaEventDestroy(stop_event));
     CHECK(cudaEventDestroy(start_event));
     CHECK(cudaStreamDestroy(stream));
+
+    CHECK(cudaDeviceReset());
 
     return EXIT_SUCCESS;
 }
