@@ -535,8 +535,8 @@ AMDs \gls{hip}-\gls{api} ist als portable Alternative zu CUDA gedacht und de
 facto ein Klon des CUDA-\gls{api}, bei dem fast jeder CUDA-Befehl
 \texttt{cudaCmd} seine genaue Entsprechung im \gls{hip}-Befehl \texttt{hipCmd}
 findet. Tatsächlich werden \gls{hip}-Quelltexte, die für eine NVIDIA-GPU
-kompiliert werden sollen, von einem einfachen Skript wieder in CUDA-Quelltexte
-umgewandelt. Diese werden dann vom \texttt{nvcc}-Compiler übersetzt.
+kompiliert werden sollen, wieder in CUDA-Quelltexte umgewandelt, da die
+\gls{hip}-Befehle die äquivalenten CUDA-Befehle ohne Umwege aufrufen.
 
 Die in den vorherigen Abschnitten für CUDA dargestellten Prinzipien gelten daher
 weitestgehend auch für \gls{hip}; vorhandene Unterschiede werden in den
@@ -578,21 +578,312 @@ implementieren, \textit{CUDA Graphs} werden momentan nicht unterstützt.
 
 \subsubsection{Übersicht}
 
+AMDs \gls{hc}-\gls{api} ist ein Dialekt des C++AMP-API, das im August 2012 von
+der Firma Microsoft veröffentlicht wurde. C++AMP setzte auf der
+Grafikschnittstelle DirectX 11 auf und ermöglichte die direkte Programmierung
+von GPUs und CPU-\gls{simd}-Registern mittels C++. 2013 übernahm AMD C++AMP
+für sein \gls{hsa}-Programm und erweiterte das API um AMD-spezifische Funktionen
+und GPU-relevante Features.
+
+HC-Kernel können entweder als separate Funktionen oder Funktoren geschrieben 
+oder als Lambda-Funktionen direkt in den C++-Quelltext eingebettet werden. Der
+\texttt{hcc}-Compiler extrahiert die Kernel aus dem sie umgebenden Quelltext
+und übersetzt sie in den GPU-Maschinencode, während der restliche Quelltext
+in den CPU-Maschinencode umgewandelt wird. Wie bei CUDA wird der komplette
+Quelltext also in einem Schritt kompiliert.
+
+Unglücklicherweise ist die Dokumentationslage des \gls{hc}-\gls{api} sehr
+schlecht. Es gibt von AMD keine öffentlich zugänglichen Dokumente, die der
+CUDA-Dokumentation in Umfang und Inhalt nahe kämen. Die in den folgenden
+Abschnitten präsentierten Erkenntnisse basieren auf der unvollständigen
+\gls{hc}-\gls{api}-Referenz, die ein AMD-Angestellter auf seiner privaten
+GitHub-Seite zur Verfügung stellt (vgl.~\cite{hcref}), der C++AMP-Spezifikation aus
+dem Jahr 2012\footnote{Die Features der Ende 2013 veröffentlichten Spezifikation
+für C++AMP 1.2 werden von HC nicht unterstützt.} (vgl.~\cite{cppamp2012}) und
+eigenen Experimenten.
+
 \subsubsection{Ausführungsmodell}
+
+Das \gls{hc}-Ausführungsmodell ähnelt dem von CUDA sehr stark und unterscheidet
+sich nur in einigen Details. Auch hier ist die kleinste Ausführungseinheit ein
+\textit{thread}, die direkt auf einen Hardware-Thread eines Multiprozessors
+abgebildet wird. Eine Gruppe von 64 \textit{Threads} bildet eine
+\textit{wavefront} (das Gegenstück zu CUDA-\textit{warps}) und arbeitet synchron
+die selben Instruktionen ab.
+
+Auf der nächsthöheren Organisationsebene befinden sich \textit{tiles}, die
+den CUDA-\textit{blocks} entsprechen und ebenfalls aus insgesamt \num{1024}
+\textit{threads} bestehen können. Auch bei \gls{hc} ist die Größe der
+\textit{tiles} bis zu dieser Grenze frei wählbar, wird aufgrund der
+\textit{wavefront}-Größe in der Regel jedoch ein Vielfaches von 64 sein. Jede
+\textit{tile} wird einem Multiprozessor zugeordnet und von diesem ausgeführt,
+das Scheduling-Verhalten der GPU bei überzähligen \textit{tiles} entspricht
+dem von CUDA.
+
+Die \textit{threads} einer \textit{tile} teilen sich den Speicher eines
+Multiprozessors, der \textit{tile static memory} genannt wird und CUDAs
+\textit{shared memory} entspricht. Barrieren ermöglichen die Synchronisation
+zwischen \textit{wavefronts}, zudem gibt es Hardware-Intrinsiken für die
+Kommunikation innerhalb einer \textit{wavefront}.
+
+CUDAs \textit{grid}-Konzept hat keine direkte \gls{hc}-Entsprechung, da
+bei letzterem die Menge der \textit{tiles} keine große Rolle spielt. Stattdessen
+ist die globale Problemgröße von Relevanz. Diese muss dabei nicht zwangsläufig
+der Gesamtzahl der \textit{threads} entsprechen. Der Programmierer hat dadurch
+die Möglichkeit, das Problem mit \textit{tiles} von selbst definierter Größe
+zu bearbeiten oder nur die globale Problemgröße anzugeben und die Festlegung der
+\textit{threads} und \textit{tiles} der Laufzeitumgebung zu überlassen.
 
 \subsubsection{Datensicht}
 
 \paragraph{Datenbewegung}
 
+Die \textit{explizite} Datenbewegung geschieht über das Definieren des
+Host-Speichers und eines GPU-Arrays sowie den anschließenden Aufruf des
+\texttt{copy}-Befehls (siehe
+Quelltext~\ref{vergleich:hc:datensicht:explizitebewegung}). Eine manuelle
+Freigabe des Speichers ist nicht notwendig, da dies automatisch im Destruktor
+des GPU-Arrays geschieht, sobald der umschließende Kontext verlassen wird.
+
+\begin{code}
+    \begin{minted}[breaklines,breakafter=\,,escapeinside=||,fontsize=\small]{c++}
+auto a_h = std::vector<float>{};
+auto b_h = std::vector<float>{};
+
+a_h.resize(num_elems);
+b_h.resize(num_elems);
+
+/* a_h initialisieren */
+
+auto a_d = hc::array<float, 1>{hc::extent<1>{num_elems}};
+auto b_d = hc::array<float, 1>{hc::extent<1>{num_elems}};
+
+hc::copy(std::begin(a_h), a_d);
+
+hc::parallel_for_each( /* kernel */ );
+
+hc::copy(b_d, std::begin(b_h))
+    \end{minted}
+    \caption{Explizite Datenbewegung mit HC}
+    \label{vergleich:hc:datensicht:explizitebewegung}
+\end{code}
+
+Einen Mittelweg zwischen impliziter und expliziter Datenbewegung stellt die
+direkte Zuordnung eines \texttt{hc::array} zu einem Datenbereich auf dem Host
+dar. Die Host-Daten werden vollständig in das \texttt{hc::array} kopiert. Wenn
+das System, auf dem das Programm ausgeführt wird, einen einheitlichen virtuellen
+Speicherbereich unterstützt, ist das \texttt{hc::array} anschließend auch vom
+Host aus ansprechbar (siehe Quelltext~\ref{vergleich:hc:datensicht:arraymix}).
+
+\begin{code}
+    \begin{minted}[breaklines,breakafter=\,,escapeinside=||,fontsize=\small]{c++}
+auto a_h = std::vector<float>{};
+
+a_h.resize(num_elems);
+
+/* a_h initialisieren */
+
+auto a_d = hc::array<float, 1>{hc::extent<1>{num_elems},
+                               std::begin(a_h)};
+auto b_d = hc::array<float, 1>{hc::extent<1>{num_elems},
+                               std::begin(b_h)};
+
+hc::parallel_for_each( /* kernel */ );
+
+// wenn vom System unterstützt
+func(b_d[42]);
+    \end{minted}
+    \caption{Implizite Datenbewegung mit HC-Arrays}
+    \label{vergleich:hc:datensicht:arraymix}
+\end{code}
+
+Mit der \texttt{hc::array\_view}-Struktur ist eine weitere Möglichkeit der
+\textit{impliziten} Datenbewegung gegeben. \texttt{hc::array\_view} lässt sich 
+sowohl für ein \texttt{hc::array} als auch einen Standard-C++-Container
+konstruieren. Die Bewegung der auf der jeweils anderen Seite benötigten Daten
+geschieht im Verborgenen und nur für die tatsächlich angeforderten Teile, nicht
+das gesamte Feld. Der Zugriff auf die Daten erfolgt dabei über die Methoden der
+\texttt{hc::array\_view}, die einen internen Zwischenspeicher besitzt. Ein
+Zugriff auf das original \texttt{hc::array} bzw.\ den originalen C++-Container
+bedarf der vorherigen Synchronisierung (siehe
+Quelltext~\ref{vergleich:hc:datensicht:implizitebewegung}). Darüber hinaus ist
+zu bemerken, dass das ausführende System keinen einheitlichen virtuellen
+Speicherbereich unterstützen muss, um \texttt{hc::array\_view} nutzen zu können.
+
+\begin{code}
+    \begin{minted}[breaklines,breakafter=\,,escapeinside=||,fontsize=\small]{c++}
+auto a_h = std::vector<float>{};
+a_h.resize(num_elems);
+
+auto b_d = hc::array<float, 1>{hc::extent<1>{num_elems}};
+
+/* a_h initialisieren */
+
+auto a_view = hc::array_view<float, 1>{hc::extent<1>{num_elems}, a_h};
+auto b_view = hc::array_view<float, 1>{b_d};
+
+a_h[42] = ...;    // a_h schreiben
+a_view.refresh(); // a_view synchronisieren
+
+hc::parallel_for_each( /* kernel */ );
+
+// a_view und b_view auf Host-Seite schreiben / lesen
+for(auto i = 0; i < num_elems; ++i)
+    a_view[hc::index<1>{i}] = b_view[hc::index<1>{i}];
+
+a_view.synchronize(); // a_h synchronisieren
+... = a_h[42]; // a_h enthält jetzt die neuen Daten
+    \end{minted}
+    \caption{Implizite Datenbewegung mit HC-Sichten}
+    \label{vergleich:hc:datensicht:implizitebewegung}
+\end{code}
+
 \paragraph{Datenanordnung}
+
+\texttt{hc::array} und \texttt{hc::array\_view} können bis zu drei Dimensionen
+abdecken. Die interne Anordnung der Daten wird dabei vor dem Programmierer
+verborgen. Dies wird einerseits daran deutlich, dass der Zugriff auf ein Feld
+über den \texttt{[]}-Operator nicht durch ganze Zahlen erfolgt, sondern mittels
+der speziellen Struktur \texttt{hc::index}, die ebenfalls bis zu drei
+Dimensionen umfassen kann. Andererseits gibt es zwei Methoden, die den
+gekapselten Zeiger zurückliefern:
+
+\begin{itemize}
+    \item \texttt{hc::array::accelerator\_pointer()} und das
+          \texttt{hc::array\_view}-Gegenstück geben einen Zeiger auf den
+          zugehörigen Device-Speicher zurück.
+    \item \texttt{hc::array::data()} bzw. das
+          \texttt{hc::array\_view}-Äquivalent liefern einen Zeiger auf ein
+          \textit{linearisiertes} Array.
+\end{itemize}
+
+Aus den obigen Beobachtungen lässt sich daher folgern, dass die Anordnung der
+Daten im GPU-Speicher nicht unbedingt der Anordnung im Hauptspeicher entsprechen
+muss und sich unter Umständen auch zwischen verschiedenen \gls{hc}-Versionen
+oder GPUs unterscheiden kann.
 
 \paragraph{Datenaffinität}
 
+Ein \texttt{hc::array} ist immer an ein bestimmtes Device gebunden. Sofern der
+Programmierer bei der Konstruktion eines \texttt{hc::array}s in einem
+Multi-GPU-System kein Device angibt, entscheidet die Laufzeitumgebung, auf
+welcher GPU der Speicher reserviert wird. Über den \texttt{hc::copy}-Befehl
+lassen sich Daten direkt zwischen \texttt{hc::array}s auf verschiedenen GPUs
+bewegen (siehe Quelltext~\ref{vergleich:hc:datensicht:arrayaff}).
+
+\begin{code}
+    \begin{minted}[breaklines,breakafter=\,,escapeinside=||,fontsize=\small]{c++}
+auto accelerators = hc::accelerator::get_all();
+
+// Devices aussuchen
+auto acc0 = ...;
+auto acc1 = ...;
+
+auto acc0_view = acc0.get_default_view();
+auto acc1_view = acc1.get_default_view();
+        
+auto a_h = std::vector<float>{};
+auto b_h = std::vector<float>{};
+a_h.resize(num_elems);
+b_h.resize(num_elems);
+
+/* a_h und b_h initialisieren */
+
+// a_d auf Device #0 anlegen
+auto a_d = hc::array<float, 1>{hc::extent<1>{num_elems},
+                               std::begin(a_h), acc0_view};
+
+// b_d auf Device #1 anlegen
+auto b_d = hc::array<float, 1>{hc::extent<1>{num_elems},
+                               std::begin(b_h), acc1_view};
+
+// Inhalt von a_d zu b_d kopieren
+hc::copy(a_d, b_d);
+    \end{minted}
+    \caption{GPU-Speicheraffinität mit HC-Arrays}
+    \label{vergleich:hc:datensicht:arrayaff}
+\end{code}
+
+
+\texttt{hc::array\_view} wird dagegen keiner GPU direkt zugeordnet. Bei einem
+Zugriff auf den auf einer GPU liegenden und von \texttt{hc::array\_view}
+verwalteten Speicher durch eine andere GPU wird der Prozess der Datenbewegung
+grundsätzlich verborgen. Er lässt sich jedoch durch den Befehl
+\texttt{hc::array\_view::synchronize\_to()} vom Programmierer zu einem von ihm
+gewählten Zeitpunkt auslösen.
+
 \paragraph{Datenlokalität}
+
+\gls{hc} unterscheidet lediglich zwei Ebenen innerhalb der Speicherhierarchie:
+
+Der \textit{global memory} ist der auf dem Device vorhandene, allen
+Multiprozessoren zugängliche Speicher. Er verfügt über ein großes
+Fassungsvermögen, benötigt jedoch viel Zeit für Speicherzugriffe.
+
+Die Multiprozessoren verfügen über programmierbare Caches, die von ihren
+Hardware-Threads genutzt werden können. Dieser \textit{tile static memory}
+genannte Speicher ist deutlich kleiner als der globale GPU-Speicher, kann jedoch
+viel schneller angesteuert werden.
+
+Obwohl \gls{hc} auf C++AMP basiert und hauptsächlich für GPUs und \gls{apu}s
+gedacht ist, werden die in C++AMP enthaltenen (optionalen) Textur-Features nicht
+unterstützt.
 
 \subsubsection{Aufgabensicht}
 
 \paragraph{Aufgabengraphen}
+
+\gls{hc}-Kernel werden an Datenstrukturen vom Typ \texttt{hc::accelerator\_view}
+übermittelt. Wie der Name impliziert, handelt es sich bei diesen Strukturen um
+\textit{logische} Sichten auf einen Beschleuniger. Der Programmierer kann
+mehrere \texttt{hc::accelerator\_view}s pro GPU erzeugen.
+
+Alle Kernel, die einer bestimmten \texttt{hc::accelerator\_view} zugeordnet
+werden, werden in der Reihenfolge ihrer Übermittlung ausgeführt. Kernel, die
+zu verschiedenen Sichten gehören, können dagegen in anderer Reihenfolge oder
+parallel ausgeführt werden. Die Synchronisation zwischen von einander abhängigen
+Kerneln, die verschiedenen \texttt{hc::accelerator\_view}s übermittelt wurden,
+erfolgt durch \texttt{hc::completion\_future}-Objekte. Diese entsprechen in
+ihrem Verhalten den \texttt{std::future}-Objekten der C++-Standardbibliothek.
+
+Der Quelltext~\ref{vergleich:hc:aufgabensicht:views} zeigt die
+Implementierung des Beispiel-Graphen
+in Abbildung~\ref{vergleich:anforderungen:aufgabensicht:graph} mit
+\texttt{hc::accelerator\_view}s.
+
+Eine auf Graphen spezialisierte Schnittstelle existiert nicht.
+
+\begin{code}
+    \begin{minted}[breaklines,breakafter=\,,escapeinside=||,fontsize=\small]{c++}
+auto accelerators = hc::accelerator::get_all();
+
+auto acc = ...;
+auto view0 = acc.create_view();
+auto view1 = acc.create_view();
+        
+// A ausführen
+auto futureA = hc::parallel_for_each(view0, /* kernel A */);
+
+// B wird nach A ausgeführt
+auto futureB = hc::parallel_for_each(view0, /* kernel B */);
+
+// C ausführen, sobald A fertig ist
+auto futureC = hc::completion_future{};
+futureA.then([&]()
+{
+    futureC = hc::parallel_for_each(view1, /* kernel C */);
+});
+
+// D wird nach B ausgeführt, sobald C fertig ist
+futureC.then([&]()
+{
+    hc::parallel_for_each(view0, /* kernel D */);
+});
+    \end{minted}
+    \caption{Aufgabengraph mit HC-GPU-Sichten}
+    \label{vergleich:hc:aufgabensicht:views}
+\end{code}
+
 
 \subsection{SYCL}
 \label{vergleich:sycl}
