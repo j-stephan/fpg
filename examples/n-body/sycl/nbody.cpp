@@ -47,13 +47,11 @@ auto body_body_interaction(float4 bi, float4 bj, float3 ai) -> float3
     const auto dist_sqr = cl::sycl::fma(r.x(), r.x(), cl::sycl::fma(
                                             r.y(), r.y(), cl::sycl::fma(
                                                 r.z(), r.z(), eps2)));
-    // auto dist_sqr = float{r.x() * r.x() + r.y() * r.y() + r.z() * r.z()} + eps2;
 
     // inv_dist_cube = 1/dist_sqr^(3/2) [4 FLOPS]
     const auto dist_sixth = dist_sqr * dist_sqr * dist_sqr;
 
     // FIXME: rsqrt currently not supported on NVIDIA devices
-    // auto inv_dist_cube = cl::sycl::rsqrt(dist_sixth);
     const auto inv_dist_cube = Q_rsqrt(dist_sixth);
 
     // s = m_j * inv_dist_cube [1 FLOP]
@@ -69,7 +67,8 @@ auto body_body_interaction(float4 bi, float4 bj, float3 ai) -> float3
 auto force_calculation(cl::sycl::nd_item<1> my_item, float4 body_pos,
                        cl::sycl::accessor<float4, 1,
                         cl::sycl::access::mode::read,
-                        cl::sycl::access::target::global_buffer> positions,
+                        cl::sycl::access::target::global_buffer,
+                        cl::sycl::access::placeholder::true_t> positions,
                        cl::sycl::accessor<float4, 1,
                         cl::sycl::access::mode::read_write,
                         cl::sycl::access::target::local> sh_position,
@@ -100,13 +99,16 @@ auto force_calculation(cl::sycl::nd_item<1> my_item, float4 body_pos,
 struct body_integrator
 {  
     cl::sycl::accessor<float4, 1, cl::sycl::access::mode::read,
-                       cl::sycl::access::target::global_buffer> old_pos;
+                       cl::sycl::access::target::global_buffer,
+                       cl::sycl::access::placeholder::true_t> old_pos;
 
     cl::sycl::accessor<float4, 1, cl::sycl::access::mode::discard_write,
-                       cl::sycl::access::target::global_buffer> new_pos;
+                       cl::sycl::access::target::global_buffer,
+                       cl::sycl::access::placeholder::true_t> new_pos;
     
     cl::sycl::accessor<float4, 1, cl::sycl::access::mode::read_write,
-                       cl::sycl::access::target::global_buffer> vel;
+                       cl::sycl::access::target::global_buffer,
+                       cl::sycl::access::placeholder::true_t> vel;
 
     cl::sycl::accessor<float4, 1, cl::sycl::access::mode::read_write,
                        cl::sycl::access::target::local> sh_position;
@@ -222,6 +224,25 @@ auto main() -> int
         auto queue = cl::sycl::queue{acc, exception_handler,
                         cl::sycl::property::queue::enable_profiling{}};
 
+        // Precompile Kernel to reduce overhead
+        auto program = cl::sycl::program{queue.get_context()};
+        program.build_with_kernel_type<body_integrator>();
+
+        std::cout << "Host program: " << program.is_host() << std::endl;
+        std::cout << "Compile options: " << program.get_compile_options() << std::endl;
+        std::cout << "Link options: " << program.get_link_options() << std::endl;
+        std::cout << "Build options: " << program.get_build_options() << std::endl;
+        std::cout << "Program state: ";
+
+        auto state = program.get_state();
+        if(state == cl::sycl::program_state::none)
+            std::cout << " none";
+        else if(state == cl::sycl::program_state::compiled)
+            std::cout << " compiled";
+        else if(state == cl::sycl::program_state::linked)
+            std::cout << " linked";
+        std::cout << std::endl;
+
         for(auto n = 1024ul; n <= 524288ul; n *= 2ul)
         {
             auto old_positions = std::vector<float4>{};
@@ -242,16 +263,45 @@ auto main() -> int
             std::generate(begin(velocities), end(velocities), init_vec);
 
             auto d_old_positions = cl::sycl::buffer<float4, 1>{
-                                                     begin(old_positions),
-                                                     end(old_positions)};
-            auto d_new_positions = cl::sycl::buffer<float4, 1>{
-                                                     begin(new_positions),
-                                                     end(new_positions)};
-            auto d_velocities = cl::sycl::buffer<float4, 1>{
-                                                  begin(velocities),
-                                                  end(velocities)};
+                cl::sycl::range<1>{old_positions.size()}};
+            d_old_positions.set_write_back(false);
 
-            for(auto block_size = 32u; block_size <= 1024u; block_size *= 2)
+            auto d_new_positions = cl::sycl::buffer<float4, 1>{
+                cl::sycl::range<1>{new_positions.size()}};
+            d_new_positions.set_write_back(false);
+
+            auto d_velocities = cl::sycl::buffer<float4, 1>{
+                cl::sycl::range<1>{velocities.size()}};
+            d_velocities.set_write_back(false);
+
+            queue.submit([&](cl::sycl::handler& cgh)
+            {
+                auto acc = d_old_positions.get_access<
+                    cl::sycl::access::mode::discard_write,
+                    cl::sycl::access::target::global_buffer>(cgh);
+
+                cgh.copy(old_positions.data(), acc);
+            });
+
+            queue.submit([&](cl::sycl::handler& cgh)
+            {
+                auto acc = d_new_positions.get_access<
+                    cl::sycl::access::mode::discard_write,
+                    cl::sycl::access::target::global_buffer>(cgh);
+
+                cgh.copy(new_positions.data(), acc);
+            });
+
+            queue.submit([&](cl::sycl::handler& cgh)
+            {
+                auto acc = d_velocities.get_access<
+                    cl::sycl::access::mode::discard_write,
+                    cl::sycl::access::target::global_buffer>(cgh);
+
+                cgh.copy(velocities.data(), acc);
+            });
+
+            for(auto block_size = 32u; block_size <= 1024u; block_size *= 2u)
             {
                 auto tiles = (static_cast<unsigned>(n) + block_size - 1)
                              / block_size;
@@ -261,44 +311,40 @@ auto main() -> int
 
                 for(auto i = 0; i < iterations; ++i)
                 {
-                    last_event = queue.submit([&] (cl::sycl::handler& cgh)
+                    last_event = queue.submit(
+                    [&, n, tiles](cl::sycl::handler& cgh)
                     {
-                        auto old_positions_acc = d_old_positions.get_access<
-                            cl::sycl::access::mode::read,
-                            cl::sycl::access::target::global_buffer>(cgh);
-
-                        auto new_positions_acc = d_new_positions.get_access<
-                            cl::sycl::access::mode::discard_write,
-                            cl::sycl::access::target::global_buffer>(cgh);
-
-                        auto velocities_acc = d_velocities.get_access<
+                        auto sh_position = cl::sycl::accessor<
+                            float4, 1,
                             cl::sycl::access::mode::read_write,
-                            cl::sycl::access::target::global_buffer>(cgh);
-
-                        auto sh_positions_acc = cl::sycl::accessor<
-                            float4, 1, cl::sycl::access::mode::read_write,
                             cl::sycl::access::target::local>{
                                 cl::sycl::range<1>{block_size},
                                 cgh};
 
-                        auto integrator = body_integrator{old_positions_acc,
-                            new_positions_acc, velocities_acc,
-                            sh_positions_acc, n, tiles};
+                        auto integrator = body_integrator{
+                                .sh_position = sh_position,
+                                .n = n,
+                                .tiles = tiles};
+
+                        cgh.require(d_old_positions, integrator.old_pos);
+                        cgh.require(d_new_positions, integrator.new_pos);
+                        cgh.require(d_velocities, integrator.vel);
 
                         cgh.parallel_for(
+                            program.get_kernel<body_integrator>(),
                             cl::sycl::nd_range<1>{
                                 cl::sycl::range<1>{n},
                                 cl::sycl::range<1>{block_size}},
-                            integrator);
+                                integrator
+                        );
                     });
 
                     if(i == 0)
                         first_event = last_event;
 
-                    last_event.wait_and_throw();
                     std::swap(d_old_positions, d_new_positions);
                 }
-                last_event.wait_and_throw();
+                queue.wait_and_throw();
 
                 auto start = first_event.get_profiling_info<
                     cl::sycl::info::event_profiling::command_start>();
