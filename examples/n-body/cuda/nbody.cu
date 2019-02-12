@@ -1,6 +1,9 @@
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
+#include <functional>
+#include <future>
 #include <iostream>
 #include <iterator>
 #include <random>
@@ -25,7 +28,7 @@ constexpr auto delta_time = 0.2f;
 constexpr auto iterations = 10;
 
 // use this when comparing to SYCL
-__device__ auto Q_rsqrt(float number) -> float
+__device__ __host__ auto Q_rsqrt(float number) -> float
 {
     // evil floating point bit level hacking - taken from Quake 3 Arena
     constexpr auto threehalfs = 1.5f;
@@ -42,40 +45,42 @@ __device__ auto Q_rsqrt(float number) -> float
     return y;
 }
 
-
-__device__ auto body_body_interaction(float4 bi, float4 bj, float3 ai)
+/******************************************************************************
+ * Device-side N-Body
+ *****************************************************************************/
+__device__ auto body_body_interaction_d(float4 bi, float4 bj, float3 ai)
 -> float3
 {
-    // r_ij
+    // r_ij [3 FLOPS]
     auto r = float3{};
     r.x = bj.x - bi.x;
     r.y = bj.y - bi.y;
     r.z = bj.z - bi.z;
 
-    // dist_sqr = dot(r_ij, r_ij) + EPS^2
-    // auto dist_sqr = r.x * r.x + r.y * r.y + r.z * r.z + eps2;
+    // dist_sqr = dot(r_ij, r_ij) + EPS^2 [6 FLOPS]
     auto dist_sqr = fmaf(r.x, r.x, fmaf(r.y, r.y, fmaf(r.z, r.z, eps2)));
 
-    // inv_dist_cube = 1/dist_sqr^(3/2)
+    // inv_dist_cube = 1/dist_sqr^(3/2) [4 FLOPS]
     auto dist_sixth = dist_sqr * dist_sqr * dist_sqr;
-    // auto inv_dist_cube = rsqrtf(dist_sixth);
-    auto inv_dist_cube = Q_rsqrt(dist_sixth);
 
-    // s = m_j * inv_dist_cube
+#ifdef SYCL
+    auto inv_dist_cube = Q_rsqrt(dist_sixth);
+#else
+    auto inv_dist_cube = rsqrtf(dist_sixth);
+#endif
+
+    // s = m_j * inv_dist_cube [1 FLOP]
     auto s = bj.w * inv_dist_cube;
 
-    // a_i = a_i + s * r_ij
-    // ai.x += r.x * s;
+    // a_i = a_i + s * r_ij [6 FLOPS]
     ai.x = fmaf(r.x, s, ai.x);
-    // ai.y += r.y * s;
     ai.y = fmaf(r.y, s, ai.y);
-    // ai.z += r.z * s;
     ai.z = fmaf(r.z, s, ai.z);
 
     return ai;
 }
 
-__device__ auto force_calculation(float4 body_pos,
+__device__ auto force_calculation_d(float4 body_pos,
                                   const float4* positions,
                                   unsigned tiles)
 -> float3
@@ -92,10 +97,10 @@ __device__ auto force_calculation(float4 body_pos,
         __syncthreads();
 
         // this loop corresponds to tile_calculation() from GPUGems 3
-        #pragma unroll
+        #pragma unroll 8
         for(auto i = 0u; i < blockDim.x; ++i)
         {
-            acc = body_body_interaction(body_pos, sh_position[i], acc);
+            acc = body_body_interaction_d(body_pos, sh_position[i], acc);
         }
         __syncthreads();
     }
@@ -103,17 +108,17 @@ __device__ auto force_calculation(float4 body_pos,
     return acc;
 }
 
-__global__ void body_integration(const float4* __restrict__ old_pos,
-                                 float4* __restrict__ new_pos,
-                                 float4* __restrict__ vel,
-                                 std::size_t n, unsigned tiles)
+__global__ void body_integration_d(const float4* __restrict__ old_pos,
+                                   float4* __restrict__ new_pos,
+                                   float4* __restrict__ vel,
+                                   std::size_t n, unsigned tiles)
 {
     auto index = blockIdx.x * blockDim.x + threadIdx.x;
     if(index >= n)
         return;
 
     auto position = old_pos[index];
-    auto accel = force_calculation(position, old_pos, tiles);
+    auto accel = force_calculation_d(position, old_pos, tiles);
 
     /*
      * acceleration = force / mass
@@ -137,6 +142,109 @@ __global__ void body_integration(const float4* __restrict__ old_pos,
 
     new_pos[index] = position;
     vel[index] = velocity;
+}
+
+/******************************************************************************
+ * Host-side N-Body
+ *****************************************************************************/
+auto body_body_interaction_h(float4 bi, float4 bj, float3 ai) -> float3
+{
+    // r_ij
+    auto r = float3{};
+    r.x = bj.x - bi.x;
+    r.y = bj.y - bi.y;
+    r.z = bj.z - bi.z;
+
+    // dist_sqr = dot(r_ij, r_ij) + EPS^2
+    // on x86/libstdc++ std::fmaf is slower but more precise than a * b + c
+    auto dist_sqr = std::fmaf(r.x, r.x,
+                                   std::fmaf(r.y, r.y,
+                                                  std::fmaf(r.z, r.z, eps2)));
+
+    // inv_dist_cube = 1/dist_sqr^(3/2)
+    auto dist_sixth = dist_sqr * dist_sqr * dist_sqr;
+#ifdef SYCL
+    auto inv_dist_cube = 1. / Q_rsqrt(dist_sixth);
+#else
+    #if __GNUC__ <= 7
+        // up until GCC 7 sqrtf is not defined in the std namespace
+        auto inv_dist_cube = 1. / sqrtf(dist_sixth);
+    #else
+        auto inv_dist_cube = 1. / std::sqrtf(dist_sixth);
+    #endif
+#endif
+
+    // s = m_j * inv_dist_cube
+    auto s = bj.w * inv_dist_cube;
+
+    // a_i = a_i + s * r_ij
+    ai.x = std::fmaf(r.x, s, ai.x);
+    ai.y = std::fmaf(r.y, s, ai.y);
+    ai.z = std::fmaf(r.z, s, ai.z);
+
+    return ai;
+}
+
+auto force_calculation_h(const std::vector<float4>& positions, std::size_t n)
+-> std::vector<float3>
+{
+    auto accels = std::vector<float3>{};
+    accels.resize(n);
+    
+    #pragma omp parallel for
+    for(auto i = 0u; i < n; ++i)
+    {
+        #pragma unroll 4
+        for(auto j = 0u; j < n; ++j)
+        {
+            body_body_interaction_h(positions[i], positions[j], accels[i]);
+        }
+    }
+
+    return accels;
+}
+
+auto body_integration_h(std::vector<float4>& old_pos,
+                        std::vector<float4>& new_pos,
+                        std::vector<float4>& vel,
+                        std::size_t n) -> void
+{
+    for(auto it = 0; it < iterations; ++it)
+    {
+        auto accels = force_calculation_h(old_pos, n);
+       
+        #pragma omp parallel for
+        for(auto i = 0u; i < n; ++i)
+        {
+            auto position = old_pos[i];
+            auto accel = accels[i];;
+
+            /*
+             * acceleration = force / mass
+             * new velocity = old velocity + acceleration * delta_time
+             * note that the body's mass is canceled out here and in
+             *  body_body_interaction. Thus force == acceleration
+             */
+            auto velocity = vel[i];
+
+            velocity.x += accel.x * delta_time;
+            velocity.y += accel.y * delta_time;
+            velocity.z += accel.z * delta_time;
+
+            velocity.x *= damping;
+            velocity.y *= damping;
+            velocity.z *= damping;
+
+            position.x += velocity.x * delta_time; 
+            position.y += velocity.y * delta_time; 
+            position.z += velocity.z * delta_time; 
+
+            new_pos[i] = position;
+            vel[i] = velocity;
+        }
+
+        std::swap(old_pos, new_pos);
+    }
 }
 
 auto main() -> int
@@ -189,10 +297,12 @@ auto main() -> int
     {
         auto old_positions = std::vector<float4>{};
         auto new_positions = std::vector<float4>{};
+        auto positions_cmp = std::vector<float4>{}; // for verification
         auto velocities = std::vector<float4>{};
 
         old_positions.resize(n);
         new_positions.resize(n);
+        positions_cmp.resize(n);
         velocities.resize(n);
 
         auto init_vec = [&]()
@@ -202,6 +312,7 @@ auto main() -> int
 
         std::generate(begin(old_positions), end(old_positions), init_vec);
         std::fill(begin(new_positions), end(new_positions), float4{});
+        std::fill(begin(positions_cmp), end(positions_cmp), float4{});
         std::generate(begin(velocities), end(velocities), init_vec);
 
         auto d_old_positions = static_cast<float4*>(nullptr);
@@ -220,6 +331,16 @@ auto main() -> int
         CHECK(cudaMemcpy(d_velocities, velocities.data(), bytes,
                         cudaMemcpyHostToDevice));
 
+        /*
+           we only need the CPU result once per different n, so launch here and
+           hope computation is done once we need it
+        */
+        auto verification = std::async(std::launch::async,
+                                       body_integration_h,
+                                       std::ref(old_positions),
+                                       std::ref(new_positions),
+                                       std::ref(velocities), n);                
+
         for(auto block_size = warp_size; block_size <= 1024u; block_size *= 2)
         {
             auto tiles = (n + block_size - 1) / block_size;
@@ -227,16 +348,47 @@ auto main() -> int
             CHECK(cudaEventRecord(start_event, stream));
             for(auto i = 0; i < iterations; ++i)
             {
-                body_integration<<<tiles, block_size,
-                                   block_size * sizeof(float4),
+                body_integration_d<<<tiles, block_size,
+                                     block_size * sizeof(float4),
                                    stream>>>(d_old_positions, d_new_positions,
                                              d_velocities, n, tiles);
-                CHECK(cudaEventRecord(stop_event, stream));
+                if(i == (iterations - 1))
+                    CHECK(cudaEventRecord(stop_event, stream));
 
-                CHECK(cudaStreamWaitEvent(stream, stop_event, 0));
+                //CHECK(cudaStreamWaitEvent(stream, stop_event, 0));
                 std::swap(d_old_positions, d_new_positions);
             }
             CHECK(cudaEventSynchronize(stop_event));
+
+            constexpr auto even_iterations = ((iterations % 2) == 0);
+            auto copy_src = even_iterations ? d_old_positions : d_new_positions;
+            CHECK(cudaMemcpy(positions_cmp.data(), copy_src, bytes,
+                             cudaMemcpyDeviceToHost));
+
+            // verify
+            verification.wait();
+            auto&& cmp_vec = even_iterations ? old_positions : new_positions;
+            auto cmp = std::mismatch(std::begin(cmp_vec), std::end(cmp_vec),
+                                     std::begin(positions_cmp),
+                                     [](const float4& a, const float4& b)
+                                     {
+                                        constexpr auto err = 1e-2;
+                                        auto x = std::abs(a.x - b.x) <= err;
+                                        auto y = std::abs(a.y - b.y) <= err;
+                                        auto z = std::abs(a.z - b.z) <= err;
+                                        return x & y & z;
+                                     });
+
+            if(cmp.first != std::end(cmp_vec))
+            {
+                std::cerr << "Mismatch: {" << cmp.first->x << ", "
+                                           << cmp.first->y << ", "
+                                           << cmp.first->z << "} != {"
+                                           << cmp.second->x << ", "
+                                           << cmp.second->y << ", "
+                                           << cmp.second->z << "}" << std::endl;
+                return EXIT_FAILURE;
+            }
 
             auto time_ms = 0.f;
             CHECK(cudaEventElapsedTime(&time_ms, start_event, stop_event));
@@ -250,6 +402,8 @@ auto main() -> int
 
             std::cout << block_size << ";" << n << ";" << time_ms << ";"
                       << gflops << std::endl;
+
+
         }
 
         CHECK(cudaFree(d_velocities));
@@ -266,4 +420,3 @@ auto main() -> int
 
     return EXIT_SUCCESS;
 }
-
