@@ -173,8 +173,8 @@ implementieren.
 \subsection{CUDA}
 \label{vergleich:cuda}
 
-\subsubsection{Übersicht}
-\label{vergleich:cuda:uebersicht}
+\subsubsection{Einführung}
+\label{vergleich:cuda:einfuehrung}
 
 Da der CUDA-Compiler \texttt{nvcc} ein C++-Compiler ist, lässt sich CUDA neben
 C++ auch in klassischen C-Programmen nutzen, sofern die Inkompatibilitäten
@@ -529,7 +529,7 @@ Implementierung.
 
 \subsection{HIP}
 
-\subsubsection{Übersicht}
+\subsubsection{Einführung}
 
 AMDs \gls{hip}-\gls{api} ist als portable Alternative zu CUDA gedacht und de
 facto ein Klon des CUDA-\gls{api}, bei dem fast jeder CUDA-Befehl
@@ -576,7 +576,7 @@ implementieren, \textit{CUDA Graphs} werden momentan nicht unterstützt.
 \subsection{HC}
 \label{vergleich:hc}
 
-\subsubsection{Übersicht}
+\subsubsection{Einführung}
 
 AMDs \gls{hc}-\gls{api} ist ein Dialekt des C++AMP-API, das im August 2012 von
 der Firma Microsoft veröffentlicht wurde. C++AMP setzte auf der
@@ -844,12 +844,18 @@ zu verschiedenen Sichten gehören, können dagegen in anderer Reihenfolge oder
 parallel ausgeführt werden. Die Synchronisation zwischen von einander abhängigen
 Kerneln, die verschiedenen \texttt{hc::accelerator\_view}s übermittelt wurden,
 erfolgt durch \texttt{hc::completion\_future}-Objekte. Diese entsprechen in
-ihrem Verhalten den \texttt{std::future}-Objekten der C++-Standardbibliothek.
+ihrem Verhalten weitestgehend den \texttt{std::future}-Objekten der
+C++-Standardbibliothek, wurden jedoch um die Methode \texttt{then} erweitert,
+die eine Ausführung eines nachfolgenden Befehls ermöglicht, sobald der aktuelle
+Kernel beendet ist. Dieser Ansatz hat jedoch einen Nachteil: \texttt{then}
+kann nur ein einziges Mal pro \texttt{completion\_future} ausgeführt werden,
+eine Verkettung oder Parallelisierung mehrerer nachfolgender Befehle gestaltet
+sich also recht schwierig.
 
 Der Quelltext~\ref{vergleich:hc:aufgabensicht:views} zeigt die
 Implementierung des Beispiel-Graphen
 in Abbildung~\ref{vergleich:anforderungen:aufgabensicht:graph} mit
-\texttt{hc::accelerator\_view}s.
+\gls{hc}.
 
 Eine auf Graphen spezialisierte Schnittstelle existiert nicht.
 
@@ -880,7 +886,7 @@ futureC.then([&]()
     hc::parallel_for_each(view0, /* kernel D */);
 });
     \end{minted}
-    \caption{Aufgabengraph mit HC-GPU-Sichten}
+    \caption{Aufgabengraph mit HC}
     \label{vergleich:hc:aufgabensicht:views}
 \end{code}
 
@@ -888,23 +894,351 @@ futureC.then([&]()
 \subsection{SYCL}
 \label{vergleich:sycl}
 
-\subsubsection{Übersicht}
+\subsubsection{Einführung}
+
+Khronos' SYCL-Standard ging aus einer Compiler-Erweiterung der Firma Codeplay
+hervor, die für den Einsatz auf PlayStation-3-Spielekonsolen konzipiert wurde.
+Diese Erweiterung ermöglichte die Markierung von C++-Funktionen mit
+Compiler-Direktiven, die dadurch automatisch auf den in der PlayStation 3
+enthaltenen Beschleunigern ausgeführt wurden. (vgl.~\cite{lomueller2016})
+
+SYCL ist syntaktisch vollständig mit dem C++-Standard kompatibel. Die Kernel
+bedürfen also keiner speziellen Annotation, wie das etwa in CUDA mit der
+Markierung \texttt{\_\_global\_\_} bzw.\ bei HC mit der Markierung
+\texttt{[[hc]]} der Fall ist. Kernel werden als Lambda-Funktionen oder als
+Funktoren geschrieben und können weitere Funktionen aufrufen. Es ist die Aufgabe
+des Compilers, Kernel und aufgerufen Funktionen zu erkennen und für das
+Ziel-Device zu übersetzen.
+
+Um die Portabilität zu gewährleisten, wird der Quelltext in mehreren Phasen
+übersetzt. Der Host-spezifische Quelltext wird einmal vom System-Compiler
+kompiliert, der Device-spezifische Code einmal für jedes Ziel-Device durch den
+jeweiligen Device-Compiler. Code, der sowohl auf AMD als auch NVIDIA-GPUs
+zur Ausführung gebracht werden soll, benötigt also einen Device-Compiler,
+der den AMD-GPU-Befehlssatz beherrscht und zusätzlich einen weiteren
+Device-Compiler, der den NVIDIA-GPU-Befehlssatz kennt. Der so generierte
+Maschinen-Code wird in die ausführbare Datei eingebettet und zur Laufzeit
+ausgewählt. (vgl.~\cite{syclspec}, S.\ 262)
+
+SYCL kann ebenfalls \gls{opencl}-Kernel verarbeiten, die dann -- wie bei dem
+\gls{opencl}-\gls{api} -- zur Laufzeit kompiliert werden.
+
+Zur Zeit existieren drei SYCL-Implementierungen, die bereits (auf jeweils
+anderer Hardware) nutzbar sind, sich jedoch noch stark in der Entwicklung
+befinden:
+
+Codeplays Implementierung \textit{ComputeCpp} ist sowohl in einer kommerziellen
+Variante für den Embedded- und Automotive-Bereich als auch in einer kostenlosen
+Version für Intel-CPUs sowie Intel- und NVIDIA-GPUs verfügbar.
+\gls{opencl}-Implementierungen, die Khronos'
+\textit{intermediate representations}\footnote{Eine abstrakte Maschinensprache,
+die von Compilern vor der Übersetzung in die eigentliche Maschinensprache
+verwendet wird. Das bekannteste Beispiel ist die
+\textit{Low Level Virtual Machine}, besser bekannt als LLVM.} SPIR oder SPIR-V
+unterstützen, können ebenfalls mit \textit{ComputeCpp} angesprochen werden.
+(vgl.~\cite{computecpp})
+
+Die von der Firma Xilinx vorangetriebene Referenzimplementierung
+\textit{triSYCL} kann SYCL-Kernel auf CPUs verschiedener Hersteller (über
+\gls{openmp}) und Xilinx' eigenen FPGAs ausführen.
+(vgl.~\cite{trisycl})
+
+Intel arbeitet gegenwärtig daran, SYCL-Unterstützung direkt in den
+clang-Compiler einzubauen. Diese namenlose\footnote{Der offizielle Titel der
+Implementierung lautet \textit{SYCL Compiler and Runtimes}.} Implementierung
+kann mit \gls{opencl}-2.1-Implementierungen zusammenarbeiten, die derzeit nur
+für manche Intel-CPUs und -GPUs vorhanden sind.
+(vgl.~\cite{intelsycl})
 
 \subsubsection{Ausführungsmodell}
+
+SYCL übernimmt \gls{opencl}s Ausführungsmodell ohne weitere Anpassungen. Da es
+sich hier nicht um ein reines GPU-\gls{api} handelt und andere Beschleuniger
+ebenfalls berücksichtigt werden, wird bei SYCL und \gls{opencl} von
+GPU-spezifischen Konzepten wie \textit{threads} abstrahiert.
+
+Führt ein Beschleuniger einen SYCL-Kernel aus, wird ein Index-Raum definiert,
+der bis zu drei Dimensionen umfassen kann. Für jeden Punkt in diesem Raum wird
+der Kernel einmal ausgeführt. Diese Kernel-Instanz heißt \textit{work-item} und
+entspricht konzeptionell den \textit{threads} der anderen Spracherweiterungen.
+(vgl.~\cite{syclspec}, S.\ 23)
+
+\textit{Work-items} werden in \textit{work-groups} gesammelt, der Entsprechung
+zu den \textit{groups} bzw.\ \textit{tiles} der anderen Spracherweiterungen.
+Die \textit{work-items} einer \textit{work-group} werden parallel vom
+Beschleuniger ausgeführt, während verschiedene \textit{work-groups} auch seriell
+ausgeführt werden können.
+(vgl.~\cite{syclspec}, S.\ 23)
+
+\textit{Work-items} der selben \textit{Work-group} können untereinander über
+den \textit{local memory} kommunizieren, der CUDAs \textit{shared memory} bzw.\
+\gls{hc}s \textit{tile static memory} entspricht. Die dabei notwendige
+Synchronisierung erfolgt durch verschiedene Barrierentypen.
+
+Aufgrund des abstrakten Hardware-Modells gibt es kein Äquivalent zu
+\textit{warps} und \textit{wavefronts} und somit auch keine standardisierten
+Intrinsiken oder Befehle, die die Kommunikation innerhalb dieser
+Hardware-spezifischen Threadgruppen ermöglichen. Eine Nutzung von
+herstellerspezifischen Erweiterungen (wie bei \gls{opencl}) ist für SYCL-Kernel
+nicht vorgesehen, hier ist nur der \glqq Umweg\grqq\ über \gls{opencl}-Kernel
+möglich.
 
 \subsubsection{Datensicht}
 
 \paragraph{Datenbewegung}
 
+Die von der SYCL-Spezifikation vorgesehene Datenbewegung ist grundsätzlich
+\textit{implizit}. Dabei kommt ein zweistufiges System zum Einsatz. Zunächst
+wird der zu verarbeitende Speicherbereich des Hosts einem \textit{buffer}
+zugeordnet. Der \textit{buffer} übernimmt während seiner Lebensdauer die
+Kontrolle über besagten Host-Speicher und reserviert einen entsprechenden
+Bereich auf dem Device (bzw. den Devices, siehe Affinitäts-Abschnitt). Der
+ursprüngliche Host-Container bzw.\ -Zeiger ist währenddessen in einem nicht
+definierten Zustand. Mitunter kann es notwendig sein, schon während der
+Lebensdauer des \textit{buffer}s den eigentlichen Host-Container zu verändern
+oder zu lesen. In diesem Fall ermöglicht das SYCL-\gls{api} die manuelle
+Synchronisierung mittels \textit{mutual exclusions}.
+(vgl.~\cite{syclspec}, Abschnitt 4.7.2)
+
+Der Zugriff auf den so verwalteten Speicher geschieht sowohl auf Host- als auch
+auf Device-Seite über \textit{accessor}-Instanzen, die über die
+\texttt{get\_access}-Methode des \textit{buffer}s akquiriert werden. Dabei
+muss der Programmierer angeben, ob der Zugriff lesend, schreibend (mit oder ohne
+Beibehalten der vorherigen Daten) oder sowohl lesend als auch schreibend
+erfolgen soll. Dies ermöglicht der SYCL-Laufzeitumgebung Optimierungen und die
+Abhängigkeitserkennung, die für Aufgabengraphen nötig ist (siehe
+Abschnitt~\ref{vergleich:sycl:aufgabensicht}).
+(vgl.~\cite{syclspec}, Abschnitt 4.7.6)
+
+Sobald der Destruktor des \textit{buffer}s erreicht wird, werden die verwalteten
+Daten wieder mit dem ursprünglichen Host-Container synchronisiert. Der
+Quelltext~\ref{vergleich:sycl:datensicht:implizitebewegung} zeigt die implizite
+Datenbewegung mit SYCL.
+
+\begin{code}
+    \begin{minted}[breaklines,breakafter=\,,escapeinside=||,fontsize=\small]{c++}
+struct some_kernel
+{
+    cl::sycl::accessor<float, 1,
+                       cl::sycl::access::mode::read_only> a;
+    cl::sycl::accessor<float, 1,
+                       cl::sycl::access::mode::discard_write> b;
+
+    void operator()(cl::sycl::nd_item<1> work_item)
+    { /* kernel */ }
+};
+
+auto a_h = std::vector<float>{};
+auto b_h = std::vector<float>{};
+
+a_h.resize(num_elems);
+b_h.resize(num_elems);
+
+/* a_h initialisieren */
+
+/* neuer Scope - SYCL-Objekte existieren nur innerhalb der
+   geschweiften Klammern */
+{
+    auto a_d = cl::sycl::buffer<float>{a_h.data(),
+                                       cl::sycl::range<1>{num_elems}};
+    auto b_d = cl::sycl::buffer<float>{b_h.data(),
+                                       cl::sycl::range<1>{num_elems}};
+    // a_h und b_h sind ab hier undefiniert
+
+    queue.submit([&](cl::sycl::handler& cgh)
+    {
+        auto acc_a = a_d.get_access<
+                        cl::sycl::access::mode::read_only>();
+        auto acc_b = b_d.get_access<
+                        cl::sycl::access::mode::discard_write>();
+
+        auto kernel = some_kernel{acc_a, acc_b};
+        cgh.parallel_for(cl::sycl::nd_range<1>{
+                            cl::sycl::range<1>{global_size},
+                            cl::sycl::range<1>{group_size}},
+                         kernel);
+    });
+    // a_h und b_h sind immer noch undefiniert
+} // Destruktoren von a_d und b_d werden hier aufgerufen
+// b_h enthält ab hier die neuen Daten
+    \end{minted}
+    \caption{Implizite Datenbewegung mit SYCL}
+    \label{vergleich:sycl:datensicht:implizitebewegung}
+\end{code}
+
+SYCL unterstützt ebenfalls die \textit{explizite} Datenbewegung. Dafür stehen
+zwei Wege bereit.
+
+Der erste Weg ähnelt stark der impliziten Datenbewegung. Hier wird lediglich
+ein anderer Konstruktor der Klasse \texttt{buffer} benutzt, der als Parameter
+keinen Zeiger auf einen Speicherbereich des Hosts erhält, sondern
+einen Ein- und einen Ausgabeiterator eines C++-Containers. Im obigen Beispiel
+könnte man diese beispielsweise durch die Funktionen \texttt{std::begin} und
+\texttt{std::end} der Standardbibliothek abfragen.
+(vgl.~\cite{syclspec}, Abschnitt 4.7.2.3)
+
+Der zweite Weg stellt mit der Methode \texttt{copy} der Klasse \texttt{handler}
+einen expliziteren Befehl bereit. Aus Sicht des Programmierers handelt es sich
+dabei um einen speziellen Kernel, der von der SYCL-Laufzeitumgebung dann in die
+entsprechenden Kopierfunktionen des \gls{opencl}-\gls{api} umgewandelt wird. Wie
+bei der impliziten Datenbewegung erfolgt der Datenzugriff über die
+\texttt{accessor}-Klasse; der
+Quelltext~\ref{vergleich:sycl:datensicht:explizitebewegung} illustriert den
+Vorgang. (vgl.~\cite{syclspec}, Abschnitt 4.8.6)
+
+\begin{code}
+    \begin{minted}[breaklines,breakafter=\,,escapeinside=||,fontsize=\small]{c++}
+auto a_h = std::vector<float>{};
+auto b_h = std::vector<float>{};
+
+a_h.resize(num_elems);
+b_h.resize(num_elems);
+
+/* a_h initialisieren */
+
+auto a_d = cl::sycl::buffer<float>{cl::sycl::range<1>{num_elems}};
+auto b_d = cl::sycl::buffer<float>{cl::sycl::range<1>{num_elems}};
+
+queue.submit([&](cl::sycl::handler& cgh)
+{
+    auto acc_a = a_d.get_access<
+                    cl::sycl::access::mode::discard_write>();
+    cgh.copy(a_h.data(), acc_a);
+});
+
+queue.submit([&](cl::sycl::handler& cgh)
+{
+    auto acc_a = a_d.get_access<cl::sycl::access::mode::read_only>();
+    auto acc_b = b_d.get_access<
+                    cl::sycl::access::mode::discard_write>();
+
+    /* kernel - wie im impliziten Beispiel */
+});
+
+queue.submit([&](cl::sycl::handler& cgh)
+{
+    auto acc_b = b_d.get_access<cl::sycl::access::read_only>();
+    cgh.copy(acc_b, b_h.data());
+});
+    \end{minted}
+    \caption{Explizite Datenbewegung mit SYCL - copy-Befehl}
+    \label{vergleich:sycl:datensicht:explizitebewegung}
+\end{code}
+
 \paragraph{Datenanordnung}
+
+Die SYCL-Spezifikation macht keine Angaben darüber, wie der den \textit{buffer}n
+zugrundeliegende Speicher angeordnet ist. Stattdessen werden Device-seitige
+Zeiger-Klassen, die sich über den \textit{accessor} anfordern lassen, explizit
+als \textit{implementation defined} bezeichnet. Es ist daher anzunehmen, dass
+eine gute SYCL-Implementierung die Datenanordnung für die jeweilige Hardware
+optimiert. (vgl.~\cite{syclspec}, S.\ 132)
+
+SYCL bietet neben dem für alle Datentypen geeigneten \textit{buffer} zusätzlich
+eine \texttt{image}-Klasse, die für die möglicherweise auf der Hardware
+vorhandenen Textur-Einheiten geeignet ist. (vgl.~\cite{syclspec}, S.\ 94)
 
 \paragraph{Datenaffinität}
 
+\textit{Buffer}- und \textit{image}-Objekte sind auf allen im System vorhandenen
+Devices sichtbar. Um die Synchronisierung zwischen Devices (möglicherweise von
+verschiedenen Herstellern) zu gewährleisten, kapseln diese Objekte unter
+Umständen mehrere Speicherreservierungen auf dem Host und den Devices.
+Eventuelle Abhängigkeiten zwischen Device-Zugriffen werden von der
+SYCL-Laufzeitumgebung erkannt und im Hintergrund synchronisiert. Bei einer
+parallelen Verarbeitung des selben Objekts durch mehrere Devices kann der
+Programmierer explizit einen atomaren Zugriff definieren.
+(vgl.~\cite{syclspec}, S.\ 24)
+
 \paragraph{Datenlokalität}
 
+SYCLs Speicherhierarchie ist vierstufig. Auf der obersten Ebene liegt der
+\textit{global memory}, der für alle \textit{work-items} sichtbar ist, er
+entspricht also den gleichnamigen Speicherebenen in CUDA und \gls{hc}.
+
+\textit{Constant memory} ist ebenfalls für alle \textit{work-items} sichtbar,
+jedoch -- wie der Name andeutet -- nur lesbar. Konzeptionell stellt er damit
+das Äquivalent zu CUDAs gleichnamigem Speicher dar.
+
+Auf der Ebene der \textit{work-groups} befindet sich der \textit{local memory},
+der den einer \textit{work-group} zugehörigen \textit{work-items} die
+Kommunikation ermöglicht. Er entspricht CUDAs \textit{shared memory} und
+\gls{hc}s \textit{tile static memory}.
+
+Der Speicher eines einzelnen \textit{work-items} wird als
+\textit{private memory} bezeichnet. Variablen, die innerhalb des Kernels
+definiert werden, werden automatisch in diesem Speicherbereich abgelegt.
+\textit{Private memory} ist damit konzeptionell wie ein Register aufzufassen.
+(vgl.~\cite{syclspec}, S.\ 27)
+
 \subsubsection{Aufgabensicht}
+\label{vergleich:sycl:aufgabensicht}
 
 \paragraph{Aufgabengraphen}
 
-\subsection{Zusammenfassung}
+Aufgabengraphen sind ein inhärentes Prinzip des SYCL-Standards. Grundsätzlich
+sind alle Kernel asynchron zueinander; sofern Abhängigkeiten bestehen, ist es
+Aufgabe der SYCL-Laufzeitumgebung, diese zu erkennen und die Kernel-Ausführung
+entsprechend zu serialisieren. (vgl.~\cite{syclspec}, Abschnitt 3.4.1.2)
+
+Der in der Abbildung~\ref{vergleich:anforderungen:aufgabensicht:graph} gezeigte
+Beispielgraph lässt sich in SYCL wie in
+Quelltext~\ref{vergleich:sycl:aufgabensicht:graph} gezeigt implementieren.
+
+\begin{code}
+    \begin{minted}[fontsize=\small]{c++}
+queue.submit([&](cl::sycl::handler& cgh)
+{
+    cgh.parallel_for(cl::sycl::nd_range<1>{...}, A);
+});
+
+// B wird nach A und parallel zu C ausgeführt
+queue.submit([&](cl::sycl::handler& cgh)
+{
+    cgh.parallel_for(cl::sycl::nd_range<1>{...}, B);
+});
+
+// C wird nach A und parallel zu B ausgeführt
+queue.submit([&](cl::sycl::handler& cgh)
+{
+    cgh.parallel_for(cl::sycl::nd_range<1>{...}, C);
+});
+
+// D wird nach B und C ausgeführt
+queue.submit([&](cl::sycl::handler& cgh)
+{
+    cgh.parallel_for(cl::sycl::nd_range<1>{...}, D);
+});
+    \end{minted}
+    \caption{Aufgabengraph mit SYCL}
+    \label{vergleich:sycl:aufgabensicht:graph}
+\end{code}
+
+\subsection{Zusammenfassung und Bewertung}
 \label{vergleich:zusammenfassung}
+
+Zusammenfassend lässt sich feststellen, dass die einzelnen Spracherweiterungen
+ähnliche Fähigkeiten bieten. Gleichwohl bleibt an dieser Stelle festzuhalten,
+dass der gewählte Kriterienkatalog nicht alle Anwendungsfälle dieser \gls{api}s
+abdeckt; eine Untersuchung unter anderen Schwerpunkten könnte daher zu einer
+gänzlich anderen Bewertung führen.
+
+Ein wichtiger Unterschied zwischen CUDA/\gls{hip} einerseits und \gls{hc} und
+SYCL andererseits liegt in ihrer Modernität. CUDA/\gls{hip} ist host-seitig ein
+reines C-\gls{api} und verlangt dem Programmierer dadurch bei der
+Speicherverwaltung erheblich mehr Arbeit und Aufmerksamkeit ab. Die C-Natur des
+\gls{api} führt außerdem dazu, dass eine Integration in bestehenden C++-Code
+vergleichsweise aufwendig ist, da z.B.\ die Interaktion mit Containern nur
+über Zeiger möglich ist.
+
+\gls{hc} und SYCL lassen sich dagegen in Kombination mit modernem C++ nutzen und
+orientieren sich in vielen Konzepten an der Standardbibliothek, was ihre
+Integration in bestehenden C++-Code recht einfach macht. Besonders der einfache
+Übergang von Standard-Containern zu den jeweiligen Speicherverwaltungssystemen
+der \gls{api}s ist hier hervorzuheben.
+
+Die Umsetzungen der Aufgabengraphen, wie sie bei CUDA/\gls{hip} und SYCL zu
+finden sind, sind für den Programmierer einfach verständlich (in SYCLs Fall
+sogar ein implizites Sprach-Feature) und gut auf komplexere Graphen skalierbar.
+\gls{hc}s Ansatz mit \texttt{futures} ist hier klar unterlegen, da die
+Implementierung komplexerer Graphen deutlich mehr Aufwand erfordert.
