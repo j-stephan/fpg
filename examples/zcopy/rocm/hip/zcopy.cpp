@@ -1,10 +1,10 @@
 #include <algorithm>
 #include <chrono>
+#include <cstdlib>
 #include <ctime>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
-#include <cstdlib>
 #include <limits>
 #include <sstream>
 
@@ -29,89 +29,55 @@
     } \
 } \
 
-template <typename DataT>
-__global__ void read_write(const DataT* __restrict__ A,
-                                 DataT* __restrict__ B,
+__global__ void read_write(const float4* __restrict__ A,
+                                 float4* __restrict__ B,
                            std::size_t elems)
 {
-    auto stride = gridDim.x * blockDim.x;
-    for(auto i = blockIdx.x * blockDim.x + threadIdx.x; i < elems; i += stride)
+    auto stride = hipGridDim_x * hipBlockDim_x;
+    for(auto i = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+             i < elems;
+             i += stride)
     {
         B[i] = A[i];
     } 
 }
 
-template <typename DataT>
-__global__ void write(DataT* __restrict__ B, std::size_t elems);
-
-template <>
-__global__ void write<float>(float* __restrict__ B, std::size_t elems)
+__global__ void write(float4* __restrict__ B, std::size_t elems)
 {
     auto stride = gridDim.x * blockDim.x;
     for(auto i = blockIdx.x * blockDim.x + threadIdx.x; i < elems; i += stride)
     {
-        B[i] = 0.f;
+        B[i] = make_float4(0.f, 0.f, 0.f, 0.f);
     }
 }
 
-template <>
-__global__ void write<double>(double* __restrict__ B, std::size_t elems)
+auto do_benchmark(int sms, int max_blocks, std::ofstream& file,
+                  int start_size, int stop_size) -> void
 {
-    auto stride = gridDim.x * blockDim.x;
-    for(auto i = blockIdx.x * blockDim.x + threadIdx.x; i < elems; i += stride)
-    {
-        B[i] = 0.0;
-    }
-}
-
-template <>
-__global__ void write<double2>(double2* __restrict__ B, std::size_t elems)
-{
-    auto stride = gridDim.x * blockDim.x;
-    for(auto i = blockIdx.x * blockDim.x + threadIdx.x; i < elems; i += stride)
-    {
-        B[i] = make_double2(0.0, 0.0);
-    }
-}
-
-template <>
-__global__ void write<double4>(double4* __restrict__ B, std::size_t elems)
-{
-    auto stride = gridDim.x * blockDim.x;
-    for(auto i = blockIdx.x * blockDim.x + threadIdx.x; i < elems; i += stride)
-    {
-        B[i] = make_double4(0.0, 0.0, 0.0, 0.0);
-    }
-}
-
-
-template <typename DataT>
-auto do_benchmark(int sms, int max_blocks, std::ofstream& file) -> void
-{
-    std::cout << "Benchmarking size " << sizeof(DataT) << std::endl;
+    std::cout << "Benchmarking size " << sizeof(float4) << std::endl;
 
     constexpr auto iters = 10;
     constexpr auto max_mem = 1u << 31; // mem per vector
-    constexpr auto max_elems = static_cast<int>(max_mem / sizeof(DataT));
+    constexpr auto max_elems = static_cast<int>(max_mem / sizeof(float4));
 
-    for(auto block_size = 64; block_size <= 1024; block_size *= 2)
+    for(auto block_size = start_size; block_size <= stop_size; block_size *= 2)
     {
         for(auto elems = block_size * sms; elems <= max_elems; elems *= 2)
         {
             // Allocate memory on device
-            auto A_d = static_cast<DataT*>(nullptr);
-            auto B_d = static_cast<DataT*>(nullptr);
+            auto A_d = static_cast<float4*>(nullptr);
+            auto B_d = static_cast<float4*>(nullptr);
 
-            CHECK(hipMalloc(&A_d, sizeof(DataT) * elems));
-            CHECK(hipMalloc(&B_d, sizeof(DataT) * elems));
+            CHECK(hipMalloc(&A_d, sizeof(float4) * elems));
+            CHECK(hipMalloc(&B_d, sizeof(float4) * elems));
 
             for(auto block_num = sms;
                      block_num <= std::min(elems / block_size, max_blocks);
                      block_num *= 2)
             {
                 // Initialize device memory
-                CHECK(hipMemset(A_d, 0x00, sizeof(DataT) * elems)); // zero
-                CHECK(hipMemset(B_d, 0xff, sizeof(DataT) * elems)); // NaN
+                CHECK(hipMemset(A_d, 0x00, sizeof(float4) * elems)); // zero
+                CHECK(hipMemset(B_d, 0xff, sizeof(float4) * elems)); // NaN
 
                 auto mintime = std::numeric_limits<float>::max();
                 for(auto k = 0; k < iters; ++k)
@@ -139,9 +105,9 @@ auto do_benchmark(int sms, int max_blocks, std::ofstream& file) -> void
                 }
 
                 file << "RW;" << block_size << ";" << block_num << ";"
-                     << sizeof(DataT) << ";" << elems << ";"
+                     << sizeof(float4) << ";" << elems << ";"
                      << mintime << ";"
-                     << (2.0e-9 * sizeof(DataT) * elems) / (mintime / 1e3)
+                     << (2.0e-9 * sizeof(float4) * elems) / (mintime / 1e3)
                      << std::endl;
             }
 
@@ -152,7 +118,7 @@ auto do_benchmark(int sms, int max_blocks, std::ofstream& file) -> void
                      block_num *= 2)
             {
                 // Initialize device memory
-                CHECK(hipMemset(B_d, 0xff, sizeof(DataT) * elems)); // NaN
+                CHECK(hipMemset(B_d, 0xff, sizeof(float4) * elems)); // NaN
 
                 auto mintime = std::numeric_limits<float>::max();
                 for(auto k = 0; k < iters; ++k)
@@ -179,9 +145,9 @@ auto do_benchmark(int sms, int max_blocks, std::ofstream& file) -> void
                 }
 
                 file << "WO;" << block_size << ";" << block_num << ";"
-                     << sizeof(DataT) << ";" << elems << ";"
+                     << sizeof(float4) << ";" << elems << ";"
                      << mintime << ";"
-                     << (1.0e-9 * sizeof(DataT) * elems) / (mintime / 1e3)
+                     << (1.0e-9 * sizeof(float4) * elems) / (mintime / 1e3)
                      << std::endl;
             }
 
@@ -241,10 +207,10 @@ auto main() -> int
     file << "type;block_size;block_num;elem_size;elem_num;mintime;throughput"
          << std::endl;
 
-    do_benchmark<float>(sms, max_blocks, file);
-    do_benchmark<double>(sms, max_blocks, file);
-    do_benchmark<double2>(sms, max_blocks, file);
-    do_benchmark<double4>(sms, max_blocks, file);
+    do_benchmark(sms, max_blocks, file, 64, 1024);
+#ifdef KEPLER
+    do_benchmark(sms, max_blocks, file, 192, 768);
+#endif
 
     return EXIT_SUCCESS;
 }
