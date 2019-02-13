@@ -7,17 +7,74 @@ Die hier gezeigten Benchmark-Ergebnisse wurden auf verschiedenen Knoten des
 \gls{hpc}-Systems Taurus gemessen:
 
 \begin{itemize}
-    \item Ein Knoten der gpu2 Partition mit zwei GPUs des Modells Tesla K20x
+    \item Ein Knoten der \texttt{gpu2}-Partition mit zwei GPUs des Modells Tesla
+          K20x (mit aktiviertem ECC).
     \item Einem experimentellen Knoten mit je einer GPU der Modelle Tesla P100
           und Tesla V100
 \end{itemize}
 
 Die Messungen fanden innerhalb der SCS5-Umgebung statt. Das verwendete
-CUDA-Modul war CUDA/9.2.88. HIP wurde in folgender Form verwendet: TODO. Als
-SYCL-Implementierung kam ComputeCpp der Firma Codeplay in der Version 1.0.4 für
-CentOS zum Einsatz.
+CUDA-Modul war \texttt{CUDA/10.0.130}, der zugehörige Host-Compiler
+\texttt{GCC/7.3.0-2.30}. HIP wurde aus dem GitHub-Repository des ROCm-Projektes
+in der Version 1.5.19061 heruntergeladen und lokal installiert. Als
+SYCL-Implementierung kam ComputeCpp der Firma Codeplay in der Version 1.0.5 für
+CentOS zum Einsatz, welches ebenfalls lokal installiert wurde.
 
 \subsection{zcopy}
+
+\subsubsection{Vorüberlegungen}
+
+Um eine optimale Ausnutzung der Speicherbandbreite zu erreichen, ist ein genauer
+Blick auf die verwendete Architektur erforderlich. Die K20x-GPUs weisen hier
+größere Unterschiede zu den P100- und V100-Modellen auf, die sich auf den
+betrachteten Benchmark auswirken können. Während die P100/V100-GPUs auf jedem
+Multiprozessor bei einfacher Genauigkeit \num{64} Hardware-Threads zur Verfügung
+haben, sind es bei den K20x-GPUs \num{192}. Ein Multiprozessor der
+P100/V100-GPUs kann somit zwei \textit{Warps} parallel ausführen, während auf
+der K20x-GPU sechs parallele \textit{Warps} pro Multiprozessor möglich sind. Die
+unterschiedliche \textit{Warp}-Zahl wirkt sich unter Umständen auf die
+Bandbreite des Speichers aus, da jeder K20x-Multiprozessor mehr Zugriffe
+benötigt als seine P100/V100-Gegenstücke. Aus diesem Grund werden auf der
+K20x-GPU und den P100/V100-GPUs Blockgrößen untersucht, die ein Vielfaches von
+\num{64} sind (bis hin zu \num{1024}). Zusätzlich werden auf der K20x
+Blockgrößen betrachtet, die ein Vielfaches von \num{192} sind (bis hin zu
+\num{768}), um eventuelle Effekte zu entdecken.
+
+Alle verwendeten NVIDIA-GPUs besitzen eine L1-Cacheline-Größe von \num{128}
+Byte. Speicherzugriffe der \textit{Warps} werden auf \textit{Half-Warps} (also
+\num{16} Threads des \textit{Warps}) aufgeteilt. Sofern alle Threads eines
+\textit{Half Warps} benachbarte \num{8}-Byte-Sequenzen laden, lassen sich diese
+Zugriffe in einer einzigen Cacheline vereinen, was die pro Thread verwendete
+Speicherbandbreite drastisch reduziert und eine insgesamt höhere Auslastung
+erlaubt.
+
+Um eine höhere Auslastung des Speicher-Controllers zu erreichen und die Anzahl
+der notwendigen Schleifendurchläufe innerhalb des Kernels zu verringern, wodurch
+sich die Zahl abhängiger Instruktionen verringert, werden die \num{8} Byte pro
+Thread in diesem Benchmark verdoppelt. Jeder Thread lädt also \num{16} Byte in
+Form eines Elements vom Typ \texttt{float4}. Die Anhang befindlichen
+Quelltexte~\ref{anhang:cuda:zcopy} (CUDA), \ref{anhang:hip:zcopy} (\gls{hip})
+und \ref{anhang:sycl:zcopy} (SYCL) zeigen die Kernel-Implementierungen der
+verschiedenen Spracherweiterungen.
+
+\subsubsection{Ergebnisse}
+
+Ein Blick auf die mit CUDA ermittelten Ergebnisse zeigt, dass die K20x-GPU bei
+Speicherzugriffen von größeren Thread-Blöcken als auch von vielen Thread-Blöcken
+profitiert. Dies gilt sowohl für die \glqq generischen\grqq\ Blockgrößen, die
+ein Vielfaches von \num{64} darstellen (siehe 
+Abbildung~\ref{nvidia:zcopy:k20xgenerisch}, als auch die auf die
+Kepler-Architektur angepassten Blockgrößen (siehe
+Abbildung~\ref{nvidia:zcopy:k20xangepasst}). Außerdem bestätigt sich die
+Annahme, dass mit der angepassten Blockgröße eine bessere Bandbreite erzielt
+werden kann (siehe Abbildung~\ref{nvidia:zcopy:k20xvergleich}). Dies hilft
+insbesondere dem kombinierten Lese- und Schreibvorgang, der dadurch nahezu die
+selbe Bandbreite wie der reine Schreibvorgang erreicht (siehe
+Abbildung~\ref{nvidia:zcopy:k20xrwwo}).
+
+Die K20x-GPU erreicht etwa 75\% der theoretisch möglichen Bandbreite (siehe
+Abbildung~\ref{nvidia:zcopy:k20xmax}). Dies ist durch das aktivierte ECC und
+die auf dem Taurus-System nicht steuerbaren Taktraten der GPU zu erklären.
 
 \subsection{Reduction}
 
