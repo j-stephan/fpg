@@ -54,8 +54,6 @@ __global__ void write(float4* __restrict__ B, std::size_t elems)
 auto do_benchmark(int sms, int max_blocks, std::ofstream& file,
                   int start_size, int stop_size) -> void
 {
-    std::cout << "Benchmarking size " << sizeof(float4) << std::endl;
-
     constexpr auto iters = 10;
     constexpr auto max_mem = 1u << 31; // mem per vector
     constexpr auto max_elems = static_cast<int>(max_mem / sizeof(float4));
