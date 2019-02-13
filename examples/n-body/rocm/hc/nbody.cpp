@@ -1,6 +1,9 @@
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <cwchar>
+#include <functional>
+#include <future>
 #include <iostream>
 #include <iterator>
 #include <locale>
@@ -43,12 +46,19 @@ namespace
     auto&& converter = std::wstring_convert<cvt>{new cvt{sys_loc.name()}};
 }
 
-[[hc]]
-auto body_body_interaction(float4 bi, float4 bj, float3 ai) -> float3
-{
-    constexpr auto eps = 0.001f;
-    constexpr auto eps2 = eps * eps;
+// can't make this global because HC is stupid
+constexpr auto eps = 0.001f;
+constexpr auto eps2 = eps * eps;
+constexpr auto delta_time = 0.2f;
+constexpr auto damping = 0.5f;
+constexpr auto iterations = 10;
 
+/******************************************************************************
+ * Device-side N-Body
+ *****************************************************************************/
+[[hc]]
+auto body_body_interaction_d(float4 bi, float4 bj, float3 ai) -> float3
+{
     // r_ij [3 FLOPS]
     auto r = bj.get_xyz() - bi.get_xyz();
 
@@ -72,10 +82,10 @@ auto body_body_interaction(float4 bi, float4 bj, float3 ai) -> float3
 }
 
 [[hc]]
-auto force_calculation(hc::tiled_index<1> idx, float4 body_pos,
-                       hc::array<float4, 1>& positions,
-                       float4* sh_position, // this is tile_static
-                       unsigned tiles)
+auto force_calculation_d(hc::tiled_index<1> idx, float4 body_pos,
+                         hc::array_view<const float4, 1> positions,
+                         float4* sh_position, // this is tile_static
+                         unsigned tiles)
 {
     auto acc = float3{0.f, 0.f, 0.f};
 
@@ -90,7 +100,7 @@ auto force_calculation(hc::tiled_index<1> idx, float4 body_pos,
         #pragma unroll 8
         for(auto i = 0; i < idx.tile_dim[0]; ++i)
         {
-            acc = body_body_interaction(body_pos, sh_position[i], acc);
+            acc = body_body_interaction_d(body_pos, sh_position[i], acc);
         }
         idx.barrier.wait_with_tile_static_memory_fence();
     }
@@ -99,11 +109,11 @@ auto force_calculation(hc::tiled_index<1> idx, float4 body_pos,
 }
 
 [[hc]]
-auto body_integration(hc::tiled_index<1> idx,
-                      hc::array<float4, 1>& old_pos,
-                      hc::array<float4, 1>& new_pos,
-                      hc::array<float4, 1>& vel,
-                      std::size_t n, unsigned tiles)
+auto body_integration_d(hc::tiled_index<1> idx,
+                        hc::array_view<const float4, 1> old_pos,
+                        hc::array_view<float4, 1> new_pos,
+                        hc::array_view<float4, 1> vel,
+                        std::size_t n, unsigned tiles)
 -> void
 {
     constexpr auto delta_time = 0.2f;
@@ -117,7 +127,8 @@ auto body_integration(hc::tiled_index<1> idx,
         return;
 
     auto position = old_pos[idx.global];
-    auto accel = force_calculation(idx, position, old_pos, sh_position, tiles);
+    auto accel = force_calculation_d(idx, position, old_pos, sh_position,
+                                     tiles);
 
     /*
      * acceleration = force / mass
@@ -134,6 +145,106 @@ auto body_integration(hc::tiled_index<1> idx,
 
     new_pos[idx.global] = position;
     vel[idx.global] = velocity;
+}
+
+/******************************************************************************
+ * Host-side N-Body
+ *****************************************************************************/
+auto body_body_interaction_h(float4 bi, float4 bj, float3 ai) -> float3
+{
+    // r_ij
+    auto r = float3{};
+    r.x = bj.x - bi.x;
+    r.y = bj.y - bi.y;
+    r.z = bj.z - bi.z;
+
+    // dist_sqr = dot(r_ij, r_ij) + EPS^2
+    // on x86/libstdc++ std::fmaf is slower but more precise than a * b + c
+    auto dist_sqr = std::fmaf(r.x, r.x,
+                                   std::fmaf(r.y, r.y,
+                                                  std::fmaf(r.z, r.z, eps2)));
+
+    // inv_dist_cube = 1/dist_sqr^(3/2)
+    auto dist_sixth = dist_sqr * dist_sqr * dist_sqr;
+#if __GNUC__ <= 7
+    // up until GCC 7 sqrtf is not defined in the std namespace
+    auto inv_dist_cube = 1. / sqrtf(dist_sixth);
+#else
+    auto inv_dist_cube = 1. / std::sqrtf(dist_sixth);
+#endif
+
+    // s = m_j * inv_dist_cube
+    auto s = bj.w * inv_dist_cube;
+
+    // a_i = a_i + s * r_ij
+    ai.x = std::fmaf(r.x, s, ai.x);
+    ai.y = std::fmaf(r.y, s, ai.y);
+    ai.z = std::fmaf(r.z, s, ai.z);
+
+    return ai;
+}
+
+auto force_calculation_h(const std::vector<float4>& positions, std::size_t n)
+-> std::vector<float3>
+{
+    auto accels = std::vector<float3>{};
+    accels.resize(n);
+
+    #pragma omp parallel for
+    for(auto i = 0u; i < n; ++i)
+    {
+        #pragma unroll 4
+        for(auto j = 0u; j < n; ++j)
+        {
+            body_body_interaction_h(positions[i], positions[j], accels[i]);
+        }
+    }
+
+    return accels;
+}
+
+auto body_integration_h(std::vector<float4>& old_pos,
+                        std::vector<float4>& new_pos,
+                        std::vector<float4>& vel,
+                        std::size_t n) -> void
+{
+
+    for(auto it = 0; it < iterations; ++it)
+    {
+        auto accels = force_calculation_h(old_pos, n);
+       
+        #pragma omp parallel for
+        for(auto i = 0u; i < n; ++i)
+        {
+            auto position = old_pos[i];
+            auto accel = accels[i];;
+
+            /*
+             * acceleration = force / mass
+             * new velocity = old velocity + acceleration * delta_time
+             * note that the body's mass is canceled out here and in
+             *  body_body_interaction. Thus force == acceleration
+             */
+            auto velocity = vel[i];
+
+            velocity.x += accel.x * delta_time;
+            velocity.y += accel.y * delta_time;
+            velocity.z += accel.z * delta_time;
+
+            velocity.x *= damping;
+            velocity.y *= damping;
+            velocity.z *= damping;
+
+            position.x += velocity.x * delta_time; 
+            position.y += velocity.y * delta_time; 
+            position.z += velocity.z * delta_time; 
+
+            new_pos[i] = position;
+            vel[i] = velocity;
+        }
+
+        std::swap(old_pos, new_pos);
+    }
 }
 
 auto main() -> int
@@ -176,10 +287,12 @@ auto main() -> int
     {
         auto old_positions = std::vector<float4>{};
         auto new_positions = std::vector<float4>{};
+        auto positions_cmp = std::vector<float4>{}; // for verification
         auto velocities = std::vector<float4>{};
 
         old_positions.resize(n);
         new_positions.resize(n);
+        positions_cmp.resize(n);
         velocities.resize(n);
 
         auto init_vec = [&]()
@@ -189,6 +302,7 @@ auto main() -> int
 
         std::generate(begin(old_positions), end(old_positions), init_vec);
         std::fill(begin(new_positions), end(new_positions), float4{});
+        std::fill(begin(positions_cmp), end(positions_cmp), float4{});
         std::generate(begin(velocities), end(velocities), init_vec);
 
         auto d_old_positions = hc::array<float4, 1>{hc::extent<1>{n}};
@@ -199,10 +313,18 @@ auto main() -> int
         hc::copy(std::begin(new_positions), std::end(new_positions), d_new_positions);
         hc::copy(std::begin(velocities), std::end(velocities), d_velocities);
 
+        /*
+           we only need the CPU result once per different n, so launch here and
+           hope computation is done once we need it
+        */
+        auto verification = std::async(std::launch::async,
+                                       body_integration_h,
+                                       std::ref(old_positions),
+                                       std::ref(new_positions),
+                                       std::ref(velocities), n);                
+
         for(auto block_size = 64u; block_size <= 1024u; block_size *= 2)
         {
-            constexpr auto iterations = 10;
-
             auto tiles = (n + block_size - 1) / block_size;
             auto global_extent = hc::extent<1>{n};
 
@@ -211,39 +333,57 @@ auto main() -> int
             // things get really messy when trying to loop
             hc::completion_future futures[iterations];
 
-            // Initial launch
-            futures[0] = hc::parallel_for_each(
-            global_extent.tile_with_dynamic(
-                block_size, block_size * sizeof(float4)),
-            [&, n, tiles] (hc::tiled_index<1> idx) [[hc]]
-            {
-                body_integration(idx, d_old_positions, d_new_positions,
-                                 d_velocities, n, tiles);
-            });
-            acc_view.flush();
+            auto old_pos_view = hc::array_view<float4, 1>{d_old_positions};
+            auto new_pos_view = hc::array_view<float4, 1>{d_new_positions};
+            auto velo_view = hc::array_view<float4, 1>{d_velocities};
 
-            // Subsequent launches
-            for(auto it = 1; it < iterations; ++it)
+            for(auto it = 0; it < iterations; ++it)
             {
-                std::swap(d_old_positions, d_new_positions);
-
                 futures[it] = hc::parallel_for_each(
-                global_extent.tile_with_dynamic(
-                    block_size, block_size * sizeof(float4)),
-                [&, n, tiles] (hc::tiled_index<1> idx) [[hc]]
+                    global_extent.tile_with_dynamic(
+                        block_size, block_size * sizeof(float4)),
+                [=] (hc::tiled_index<1> idx) [[hc]]
                 {
-                    body_integration(idx, d_old_positions, d_new_positions,
-                                     d_velocities, n, tiles);
+                    body_integration_d(idx, old_pos_view, new_pos_view, velo_view,
+                                     n, tiles);
                 });
                 acc_view.flush();
+                std::swap(old_pos_view, new_pos_view);
             }
             acc_view.wait();
 
             auto start_future = futures[0];
             auto stop_future = futures[iterations - 1];
 
-            // stop_future.wait();
+            constexpr auto even_iterations = ((iterations % 2) == 0);
+            auto&& copy_src = even_iterations ? d_old_positions : d_new_positions;
+            hc::copy(copy_src, std::begin(positions_cmp));
             
+            // verify
+            verification.wait();
+            auto&& cmp_vec = even_iterations ? old_positions : new_positions;
+            auto cmp = std::mismatch(std::begin(cmp_vec), std::end(cmp_vec),
+                                     std::begin(positions_cmp),
+                                     [](const float4& a, const float4& b)
+                                     {
+                                        constexpr auto err = 1e-2;
+                                        auto x = std::abs(a.x - b.x) <= err;
+                                        auto y = std::abs(a.y - b.y) <= err;
+                                        auto z = std::abs(a.z - b.z) <= err;
+                                        return x & y & z;
+                                     });
+
+            if(cmp.first != std::end(cmp_vec))
+            {
+                std::cerr << "Mismatch: {" << cmp.first->x << ", "
+                                           << cmp.first->y << ", "
+                                           << cmp.first->z << "} != {"
+                                           << cmp.second->x << ", "
+                                           << cmp.second->y << ", "
+                                           << cmp.second->z << "}" << std::endl;
+                return EXIT_FAILURE;
+            }
+
             auto start = start_future.get_begin_tick();
             auto stop = stop_future.get_end_tick();
             auto elapsed = stop - start;

@@ -1,6 +1,9 @@
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
+#include <functional>
+#include <future>
 #include <iostream>
 #include <iterator>
 #include <random>
@@ -38,23 +41,22 @@ auto Q_rsqrt(const float number) -> float
     return y;
 }
 
+// we can use this function both on the host and the device
 auto body_body_interaction(float4 bi, float4 bj, float3 ai) -> float3
 {
     // r_ij [3 FLOPS]
-    const auto r = bj.xyz() - bi.xyz();
+    auto r = bj.xyz() - bi.xyz();
 
     // dist_sqr = dot(r_ij, r_ij) + EPS^2 [6 FLOPS]
     const auto dist_sqr = cl::sycl::fma(r.x(), r.x(), cl::sycl::fma(
                                             r.y(), r.y(), cl::sycl::fma(
                                                 r.z(), r.z(), eps2)));
-    // auto dist_sqr = float{r.x() * r.x() + r.y() * r.y() + r.z() * r.z()} + eps2;
 
     // inv_dist_cube = 1/dist_sqr^(3/2) [4 FLOPS]
-    const auto dist_sixth = dist_sqr * dist_sqr * dist_sqr;
+    auto dist_sixth = dist_sqr * dist_sqr * dist_sqr;
 
     // FIXME: rsqrt currently not supported on NVIDIA devices
-    // auto inv_dist_cube = cl::sycl::rsqrt(dist_sixth);
-    const auto inv_dist_cube = Q_rsqrt(dist_sixth);
+    auto inv_dist_cube = Q_rsqrt(dist_sixth);
 
     // s = m_j * inv_dist_cube [1 FLOP]
     const auto s = float{bj.w()} * inv_dist_cube;
@@ -66,14 +68,18 @@ auto body_body_interaction(float4 bi, float4 bj, float3 ai) -> float3
     return ai;
 }
 
-auto force_calculation(cl::sycl::nd_item<1> my_item, float4 body_pos,
-                       cl::sycl::accessor<float4, 1,
-                        cl::sycl::access::mode::read,
-                        cl::sycl::access::target::global_buffer> positions,
-                       cl::sycl::accessor<float4, 1,
-                        cl::sycl::access::mode::read_write,
-                        cl::sycl::access::target::local> sh_position,
-                       unsigned tiles)
+/******************************************************************************
+ * Device-side N-Body
+ *****************************************************************************/
+auto force_calculation_d(cl::sycl::nd_item<1> my_item, float4 body_pos,
+                         cl::sycl::accessor<float4, 1,
+                            cl::sycl::access::mode::read,
+                            cl::sycl::access::target::global_buffer,
+                            cl::sycl::access::placeholder::true_t> positions,
+                         cl::sycl::accessor<float4, 1,
+                            cl::sycl::access::mode::read_write,
+                            cl::sycl::access::target::local> sh_position,
+                         unsigned tiles)
 -> float3
 {
     auto acc = float3{0.f, 0.f, 0.f};
@@ -86,7 +92,7 @@ auto force_calculation(cl::sycl::nd_item<1> my_item, float4 body_pos,
         my_item.barrier(cl::sycl::access::fence_space::local_space);
 
         // this loop corresponds to tile_calculation() from GPUGems 3
-        #pragma unroll
+        #pragma unroll 8
         for(auto i = 0u; i < my_item.get_local_range(0); ++i)
         {
             acc = body_body_interaction(body_pos, sh_position[i], acc);
@@ -100,13 +106,16 @@ auto force_calculation(cl::sycl::nd_item<1> my_item, float4 body_pos,
 struct body_integrator
 {  
     cl::sycl::accessor<float4, 1, cl::sycl::access::mode::read,
-                       cl::sycl::access::target::global_buffer> old_pos;
+                       cl::sycl::access::target::global_buffer,
+                       cl::sycl::access::placeholder::true_t> old_pos;
 
     cl::sycl::accessor<float4, 1, cl::sycl::access::mode::discard_write,
-                       cl::sycl::access::target::global_buffer> new_pos;
+                       cl::sycl::access::target::global_buffer,
+                       cl::sycl::access::placeholder::true_t> new_pos;
     
     cl::sycl::accessor<float4, 1, cl::sycl::access::mode::read_write,
-                       cl::sycl::access::target::global_buffer> vel;
+                       cl::sycl::access::target::global_buffer,
+                       cl::sycl::access::placeholder::true_t> vel;
 
     cl::sycl::accessor<float4, 1, cl::sycl::access::mode::read_write,
                        cl::sycl::access::target::local> sh_position;
@@ -121,8 +130,8 @@ struct body_integrator
             return;
 
         auto position = old_pos[index];
-        auto accel = force_calculation(my_item, position, old_pos,
-                                       sh_position, tiles);
+        auto accel = force_calculation_d(my_item, position, old_pos,
+                                         sh_position, tiles);
 
         /*
          * acceleration = force / mass
@@ -141,6 +150,64 @@ struct body_integrator
         vel[index] = velocity;
     }
 };
+
+/******************************************************************************
+ * Host-side N-Body
+ *****************************************************************************/
+auto force_calculation_h(const std::vector<float4>& positions, std::size_t n)
+-> std::vector<float3>
+{
+    auto accels = std::vector<float3>{};
+    accels.resize(n);
+
+    #pragma omp parallel for
+    for(auto i = 0u; i < n; ++i)
+    {
+        #pragma unroll 4
+        for(auto j = 0u; j < n; ++j)
+        {
+            body_body_interaction(positions[i], positions[j], accels[i]);
+        }
+    }
+
+    return accels;
+}
+
+auto body_integration_h(std::vector<float4>& old_pos,
+                        std::vector<float4>& new_pos,
+                        std::vector<float4>& vel,
+                        std::size_t n) -> void
+{
+    for(auto it = 0; it < iterations; ++it)
+    {
+        auto accels = force_calculation_h(old_pos, n);
+       
+        #pragma omp parallel for
+        for(auto i = 0u; i < n; ++i)
+        {
+            auto position = old_pos[i];
+            auto accel = accels[i];;
+
+            /*
+             * acceleration = force / mass
+             * new velocity = old velocity + acceleration * delta_time
+             * note that the body's mass is canceled out here and in
+             *  body_body_interaction. Thus force == acceleration
+             */
+            auto velocity = vel[i];
+
+            velocity.xyz() += accel.xyz() * delta_time;
+            velocity.xyz() *= damping;
+
+            position.xyz() += velocity.xyz() * delta_time; 
+
+            new_pos[i] = position;
+            vel[i] = velocity;
+        }
+
+        std::swap(old_pos, new_pos);
+    }
+}
 
 auto main() -> int
 {
@@ -169,7 +236,7 @@ auto main() -> int
         {
             std::cout << "I'm sorry, Dave. I'm afraid I can't do that."
                       << std::endl;
-            std::exit(EXIT_FAILURE);
+            return EXIT_FAILURE;
         }
 
         auto&& platform = platforms[index];
@@ -197,7 +264,7 @@ auto main() -> int
         {
             std::cout << "I'm sorry, Dave. I'm afraid I can't do that."
                       << std::endl;
-            std::exit(EXIT_FAILURE);
+            return EXIT_FAILURE;
         }
 
         auto acc = accelerators[index];
@@ -222,14 +289,35 @@ auto main() -> int
         auto queue = cl::sycl::queue{acc, exception_handler,
                         cl::sycl::property::queue::enable_profiling{}};
 
-        for(auto n = 1024ul; n <= 524288ul; n *= 2ul)
+        // Precompile Kernel to reduce overhead
+        auto program = cl::sycl::program{queue.get_context()};
+        program.build_with_kernel_type<body_integrator>();
+
+        std::cout << "Host program: " << program.is_host() << std::endl;
+        std::cout << "Compile options: " << program.get_compile_options() << std::endl;
+        std::cout << "Link options: " << program.get_link_options() << std::endl;
+        std::cout << "Build options: " << program.get_build_options() << std::endl;
+        std::cout << "Program state: ";
+
+        auto state = program.get_state();
+        if(state == cl::sycl::program_state::none)
+            std::cout << " none";
+        else if(state == cl::sycl::program_state::compiled)
+            std::cout << " compiled";
+        else if(state == cl::sycl::program_state::linked)
+            std::cout << " linked";
+        std::cout << std::endl;
+
+        for(auto n = 2048ul; n <= 524288ul; n *= 2ul)
         {
             auto old_positions = std::vector<float4>{};
             auto new_positions = std::vector<float4>{};
+            auto positions_cmp = std::vector<float4>{}; // for verification
             auto velocities = std::vector<float4>{};
 
             old_positions.resize(n);
             new_positions.resize(n);
+            positions_cmp.resize(n);
             velocities.resize(n);
 
             auto init_vec = [&]()
@@ -239,19 +327,59 @@ auto main() -> int
 
             std::generate(begin(old_positions), end(old_positions), init_vec);
             std::fill(begin(new_positions), end(new_positions), float4{});
+            std::fill(begin(positions_cmp), end(positions_cmp), float4{});
             std::generate(begin(velocities), end(velocities), init_vec);
 
             auto d_old_positions = cl::sycl::buffer<float4, 1>{
-                                                     begin(old_positions),
-                                                     end(old_positions)};
-            auto d_new_positions = cl::sycl::buffer<float4, 1>{
-                                                     begin(new_positions),
-                                                     end(new_positions)};
-            auto d_velocities = cl::sycl::buffer<float4, 1>{
-                                                  begin(velocities),
-                                                  end(velocities)};
+                cl::sycl::range<1>{old_positions.size()}};
+            d_old_positions.set_write_back(false);
 
-            for(auto block_size = 32u; block_size <= 1024u; block_size *= 2)
+            auto d_new_positions = cl::sycl::buffer<float4, 1>{
+                cl::sycl::range<1>{new_positions.size()}};
+            d_new_positions.set_write_back(false);
+
+            auto d_velocities = cl::sycl::buffer<float4, 1>{
+                cl::sycl::range<1>{velocities.size()}};
+            d_velocities.set_write_back(false);
+
+            queue.submit([&](cl::sycl::handler& cgh)
+            {
+                auto acc = d_old_positions.get_access<
+                    cl::sycl::access::mode::discard_write,
+                    cl::sycl::access::target::global_buffer>(cgh);
+
+                cgh.copy(old_positions.data(), acc);
+            });
+
+            queue.submit([&](cl::sycl::handler& cgh)
+            {
+                auto acc = d_new_positions.get_access<
+                    cl::sycl::access::mode::discard_write,
+                    cl::sycl::access::target::global_buffer>(cgh);
+
+                cgh.copy(new_positions.data(), acc);
+            });
+
+            queue.submit([&](cl::sycl::handler& cgh)
+            {
+                auto acc = d_velocities.get_access<
+                    cl::sycl::access::mode::discard_write,
+                    cl::sycl::access::target::global_buffer>(cgh);
+
+                cgh.copy(velocities.data(), acc);
+            });
+
+            /*
+               we only need the CPU result once per different n, so launch here
+               and hope computation is done once we need it
+            */
+            auto verification = std::async(std::launch::async,
+                                           body_integration_h,
+                                           std::ref(old_positions),
+                                           std::ref(new_positions),
+                                           std::ref(velocities), n);                
+
+            for(auto block_size = 32u; block_size <= 1024u; block_size *= 2u)
             {
                 auto tiles = (static_cast<unsigned>(n) + block_size - 1)
                              / block_size;
@@ -261,44 +389,83 @@ auto main() -> int
 
                 for(auto i = 0; i < iterations; ++i)
                 {
-                    last_event = queue.submit([&] (cl::sycl::handler& cgh)
+                    last_event = queue.submit(
+                    [&, n, tiles](cl::sycl::handler& cgh)
                     {
-                        auto old_positions_acc = d_old_positions.get_access<
-                            cl::sycl::access::mode::read,
-                            cl::sycl::access::target::global_buffer>(cgh);
-
-                        auto new_positions_acc = d_new_positions.get_access<
-                            cl::sycl::access::mode::discard_write,
-                            cl::sycl::access::target::global_buffer>(cgh);
-
-                        auto velocities_acc = d_velocities.get_access<
+                        auto sh_position = cl::sycl::accessor<
+                            float4, 1,
                             cl::sycl::access::mode::read_write,
-                            cl::sycl::access::target::global_buffer>(cgh);
-
-                        auto sh_positions_acc = cl::sycl::accessor<
-                            float4, 1, cl::sycl::access::mode::read_write,
                             cl::sycl::access::target::local>{
                                 cl::sycl::range<1>{block_size},
                                 cgh};
 
-                        auto integrator = body_integrator{old_positions_acc,
-                            new_positions_acc, velocities_acc,
-                            sh_positions_acc, n, tiles};
+                        auto integrator = body_integrator{
+                                .sh_position = sh_position,
+                                .n = n,
+                                .tiles = tiles};
+
+                        cgh.require(d_old_positions, integrator.old_pos);
+                        cgh.require(d_new_positions, integrator.new_pos);
+                        cgh.require(d_velocities, integrator.vel);
 
                         cgh.parallel_for(
+                            program.get_kernel<body_integrator>(),
                             cl::sycl::nd_range<1>{
                                 cl::sycl::range<1>{n},
                                 cl::sycl::range<1>{block_size}},
-                            integrator);
+                                integrator
+                        );
                     });
 
                     if(i == 0)
                         first_event = last_event;
 
-                    last_event.wait_and_throw();
                     std::swap(d_old_positions, d_new_positions);
                 }
-                last_event.wait_and_throw();
+                queue.wait_and_throw();
+
+                constexpr auto even_iterations = ((iterations % 2) == 0);
+                auto copy_src = even_iterations ? d_old_positions :
+                                                  d_new_positions;
+
+                queue.submit([&](cl::sycl::handler& cgh)
+                {
+                    auto acc = copy_src.get_access<
+                        cl::sycl::access::mode::read,
+                        cl::sycl::access::target::global_buffer>(cgh);
+
+                    cgh.copy(acc, positions_cmp.data());
+                });
+                queue.wait_and_throw();
+
+                // verify
+                verification.wait();
+                auto&& cmp_vec = even_iterations ? old_positions :
+                                                   new_positions;
+                auto cmp = std::mismatch(std::begin(cmp_vec), std::end(cmp_vec),
+                                         std::begin(positions_cmp),
+                                         [](const float4& a, const float4& b)
+                                         {
+                                            using namespace cl::sycl;
+                                            constexpr auto err = 1e-2;
+                                            auto diff = fabs(a.xyz() - b.xyz());
+                                            auto x = float{diff.x()} <= err;
+                                            auto y = float{diff.y()} <= err;
+                                            auto z = float{diff.z()} <= err;
+                                            return x & y & z;
+                                         });
+
+                if(cmp.first != std::end(cmp_vec))
+                {
+                    std::cerr << "Mismatch: {" << cmp.first->x() << ", "
+                                               << cmp.first->y() << ", "
+                                               << cmp.first->z() << "} != {"
+                                               << cmp.second->x() << ", "
+                                               << cmp.second->y() << ", "
+                                               << cmp.second->z() << "}"
+                                               << std::endl;
+                    return EXIT_FAILURE;
+                }
 
                 auto start = first_event.get_profiling_info<
                     cl::sycl::info::event_profiling::command_start>();
@@ -324,7 +491,7 @@ auto main() -> int
     catch(const cl::sycl::exception& e)
     {
         std::cerr << e.what() << std::endl;
-        std::exit(EXIT_FAILURE);
+        return EXIT_FAILURE;
     }
     return EXIT_SUCCESS;
 }
