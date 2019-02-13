@@ -1,0 +1,3 @@
+{ "traceEvents":[{}
+,{"args":{"name":"GPU0"},"ph":"M","pid":2,"name":"process_name"}
+]}

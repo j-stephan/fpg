@@ -44,7 +44,6 @@ __device__ auto body_body_interaction(float4 bi, float4 bj, float3 ai)
     r.z = bj.z - bi.z;
 
     // dist_sqr = dot(r_ij, r_ij) + EPS^2
-    // auto dist_sqr = r.x * r.x + r.y * r.y + r.z * r.z + eps2;
     auto dist_sqr = fmaf(r.x, r.x, fmaf(r.y, r.y, fmaf(r.z, r.z, eps2)));
 
     // inv_dist_cube = 1/dist_sqr^(3/2)
@@ -55,11 +54,8 @@ __device__ auto body_body_interaction(float4 bi, float4 bj, float3 ai)
     auto s = bj.w * inv_dist_cube;
 
     // a_i = a_i + s * r_ij
-    //ai.x += r.x * s;
     ai.x = fmaf(r.x, s, ai.x);
-    //ai.y += r.y * s;
     ai.y = fmaf(r.y, s, ai.y);
-    //ai.z += r.z * s;
     ai.z = fmaf(r.z, s, ai.z);
 
     return ai;
@@ -82,7 +78,7 @@ __device__ auto force_calculation(float4 body_pos,
         __syncthreads();
 
         // this loop corresponds to tile_calculation() from GPUGems 3
-        #pragma unroll
+        #pragma unroll 64
         for(auto i = 0u; i < hipBlockDim_x; ++i)
         {
             acc = body_body_interaction(body_pos, sh_position[i], acc);

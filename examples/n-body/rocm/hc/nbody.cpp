@@ -53,19 +53,17 @@ auto body_body_interaction(float4 bi, float4 bj, float3 ai) -> float3
     auto r = bj.get_xyz() - bi.get_xyz();
 
     // dist_sqr = dot(r_ij, r_ij) + EPS^2 [6 FLOPS]
-    //auto dist_sqr = float{r.x * r.x + r.y * r.y + r.z * r.z} + eps2;
     auto dist_sqr = fmaf(r.x, r.x, fmaf(r.y, r.y, fmaf(r.z, r.z, eps2)));
 
     // inv_dist_cube = 1/dist_sqr^(3/2) [4 FLOPS]
     // NOTE: rsqrt lives in the global namespace, not the hc namespace
     auto dist_sixth = dist_sqr * dist_sqr * dist_sqr;
-    auto inv_dist_cube = rsqrt(dist_sixth);
+    auto inv_dist_cube = rsqrtf(dist_sixth);
 
     // s = m_j * inv_dist_cube [1 FLOP]
     auto s = float{bj.w} * inv_dist_cube;
 
     // a_i = a_i + s * r_ij [6 FLOPS]
-    //ai += r * s;
     ai.x = fmaf(r.x, s, ai.x);
     ai.y = fmaf(r.y, s, ai.y);
     ai.z = fmaf(r.z, s, ai.z);
@@ -75,7 +73,7 @@ auto body_body_interaction(float4 bi, float4 bj, float3 ai) -> float3
 
 [[hc]]
 auto force_calculation(hc::tiled_index<1> idx, float4 body_pos,
-                       hc::array_view<const float4, 1> positions,
+                       hc::array<float4, 1>& positions,
                        float4* sh_position, // this is tile_static
                        unsigned tiles)
 {
@@ -89,7 +87,7 @@ auto force_calculation(hc::tiled_index<1> idx, float4 body_pos,
         idx.barrier.wait_with_tile_static_memory_fence();
 
         // this loop corresponds to tile_calculation() from GPUGems 3
-        #pragma unroll
+        #pragma unroll 8
         for(auto i = 0; i < idx.tile_dim[0]; ++i)
         {
             acc = body_body_interaction(body_pos, sh_position[i], acc);
@@ -102,9 +100,9 @@ auto force_calculation(hc::tiled_index<1> idx, float4 body_pos,
 
 [[hc]]
 auto body_integration(hc::tiled_index<1> idx,
-                      hc::array_view<const float4, 1> old_pos,
-                      hc::array_view<float4, 1> new_pos,
-                      hc::array_view<float4, 1> vel,
+                      hc::array<float4, 1>& old_pos,
+                      hc::array<float4, 1>& new_pos,
+                      hc::array<float4, 1>& vel,
                       std::size_t n, unsigned tiles)
 -> void
 {
@@ -118,7 +116,7 @@ auto body_integration(hc::tiled_index<1> idx,
     if(index >= n)
         return;
 
-    auto position = old_pos[index];
+    auto position = old_pos[idx.global];
     auto accel = force_calculation(idx, position, old_pos, sh_position, tiles);
 
     /*
@@ -127,15 +125,15 @@ auto body_integration(hc::tiled_index<1> idx,
      * note that the body's mass is canceled out here and in
      *  body_body_interaction. Thus force == acceleration
      */
-    auto velocity = vel[index];
+    auto velocity = vel[idx.global];
 
     velocity.set_xyz(velocity.get_xyz() + accel.get_xyz() * delta_time); 
     velocity.set_xyz(velocity.get_xyz() * damping);
 
     position.set_xyz(position.get_xyz() + velocity.get_xyz() * delta_time);
 
-    new_pos[index] = position;
-    vel[index] = velocity;
+    new_pos[idx.global] = position;
+    vel[idx.global] = velocity;
 }
 
 auto main() -> int
@@ -165,7 +163,12 @@ auto main() -> int
         return EXIT_FAILURE;
     }
 
-    hc::accelerator::set_default(accelerators[index].get_device_path());
+    auto&& acc = accelerators[index];
+    auto dev_path = accelerators[index].get_device_path();
+    hc::accelerator::set_default(acc.get_device_path());
+
+    auto acc_view = acc.get_default_view();
+    acc_view.flush();
 
     std::cout << "tile_size;n;time_ms;gflops" << std::endl;
 
@@ -188,12 +191,13 @@ auto main() -> int
         std::fill(begin(new_positions), end(new_positions), float4{});
         std::generate(begin(velocities), end(velocities), init_vec);
 
-        auto d_old_positions = hc::array<float4, 1>{hc::extent<1>{n},
-                                                    std::begin(old_positions)};
-        auto d_new_positions = hc::array<float4, 1>{hc::extent<1>{n},
-                                                    std::begin(new_positions)};
-        auto d_velocities = hc::array<float4, 1>{hc::extent<1>{n},
-                                                 std::begin(velocities)};
+        auto d_old_positions = hc::array<float4, 1>{hc::extent<1>{n}};
+        auto d_new_positions = hc::array<float4, 1>{hc::extent<1>{n}};
+        auto d_velocities = hc::array<float4, 1>{hc::extent<1>{n}};
+
+        hc::copy(std::begin(old_positions), std::end(old_positions), d_old_positions);
+        hc::copy(std::begin(new_positions), std::end(new_positions), d_new_positions);
+        hc::copy(std::begin(velocities), std::end(velocities), d_velocities);
 
         for(auto block_size = 64u; block_size <= 1024u; block_size *= 2)
         {
@@ -207,40 +211,38 @@ auto main() -> int
             // things get really messy when trying to loop
             hc::completion_future futures[iterations];
 
-            auto old_pos_view = hc::array_view<float4, 1>{d_old_positions};
-            auto new_pos_view = hc::array_view<float4, 1>{d_new_positions};
-            auto velo_view = hc::array_view<float4, 1>{d_velocities};
-
             // Initial launch
             futures[0] = hc::parallel_for_each(
             global_extent.tile_with_dynamic(
                 block_size, block_size * sizeof(float4)),
-            [=] (hc::tiled_index<1> idx) [[hc]]
+            [&, n, tiles] (hc::tiled_index<1> idx) [[hc]]
             {
-                body_integration(idx, old_pos_view, new_pos_view, velo_view,
-                                 n, tiles);
+                body_integration(idx, d_old_positions, d_new_positions,
+                                 d_velocities, n, tiles);
             });
+            acc_view.flush();
 
             // Subsequent launches
             for(auto it = 1; it < iterations; ++it)
             {
-                futures[it - 1].wait();
-                std::swap(old_pos_view, new_pos_view);
+                std::swap(d_old_positions, d_new_positions);
 
                 futures[it] = hc::parallel_for_each(
                 global_extent.tile_with_dynamic(
                     block_size, block_size * sizeof(float4)),
-                [=] (hc::tiled_index<1> idx) [[hc]]
+                [&, n, tiles] (hc::tiled_index<1> idx) [[hc]]
                 {
-                    body_integration(idx, old_pos_view, new_pos_view,
-                                     velo_view, n, tiles);
+                    body_integration(idx, d_old_positions, d_new_positions,
+                                     d_velocities, n, tiles);
                 });
+                acc_view.flush();
             }
+            acc_view.wait();
 
             auto start_future = futures[0];
             auto stop_future = futures[iterations - 1];
 
-            stop_future.wait();
+            // stop_future.wait();
             
             auto start = start_future.get_begin_tick();
             auto stop = stop_future.get_end_tick();
