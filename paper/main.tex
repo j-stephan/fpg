@@ -3,8 +3,10 @@
 \usepackage{algorithmicx}
 \usepackage{algpseudocode}
 \usepackage{caption}
+\usepackage{chngcntr} % Bilder pro section zählen
 \usepackage{datetime}
 \usepackage{etoolbox}
+\usepackage{float}
 \usepackage[acronyms,nonumberlist,nopostdot,toc,savewrites,xindy]{glossaries}
 \usepackage[section,newfloat]{minted}
 \usepackage[super]{nth}
@@ -17,11 +19,14 @@
 \usepackage{tkz-berge}
 \usepackage{xintexpr} % weil PGFPlots zu dämlich für 1024 ist
 
+% Bilder pro section
+\counterwithin{figure}{section}
+
 \usetikzlibrary{arrows}
 \usetikzlibrary{arrows.meta}
 
 \pgfplotsset{
-    /pgfplots/vegamax/.style = {
+    /pgfplots/peak/.style = {
         legend image code/.code = {
             \draw[solid,thick,red](-0.05cm,0cm) -- (0.3cm, 0cm);
         }
