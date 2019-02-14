@@ -315,6 +315,112 @@ struct writer
 \subsection{HIP-zcopy (AMD)}
 \label{anhang:hip:amdzcopyfig}
 
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {zcopy -- Lesen + Schreiben -- Vega 64},
+            xlabel = {Blöcke pro Multiprozessor},
+            ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
+            xmode = log,
+            log basis x = 2,
+            xmin = 1, xmax = 4096,
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = south east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            width = 0.75\textwidth,
+            scale only axis,
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = blocks_per_sm, y = throughput-64,
+                            col sep = semicolon]
+                           {data/zcopy-amd-hip-vega64-rw.csv};
+            \addlegendentry{$\text{Blockgröße} = 64$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-128,
+                            col sep = semicolon]
+                           {data/zcopy-amd-hip-vega64-rw.csv};
+            \addlegendentry{$\text{Blockgröße} = 128$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-256,
+                            col sep = semicolon]
+                           {data/zcopy-amd-hip-vega64-rw.csv};
+            \addlegendentry{$\text{Blockgröße} = 256$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-512,
+                            col sep = semicolon]
+                           {data/zcopy-amd-hip-vega64-rw.csv};
+            \addlegendentry{$\text{Blockgröße} = 512$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-1024,
+                            col sep = semicolon]
+                           {data/zcopy-amd-hip-vega64-rw.csv};
+            \addlegendentry{$\text{Blockgröße} = 1024$} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{Bandbreite der Vega 64 (Lesen und Schreiben, HIP)}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {zcopy -- Schreiben -- Vega 64},
+            xlabel = {Blöcke pro Multiprozessor},
+            ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
+            xmode = log,
+            log basis x = 2,
+            xmin = 1, xmax = 4096,
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = south east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            width = 0.75\textwidth,
+            scale only axis,
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = blocks_per_sm, y = throughput-64,
+                            col sep = semicolon]
+                           {data/zcopy-amd-hip-vega64-w.csv};
+            \addlegendentry{$\text{Blockgröße} = 64$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-128,
+                            col sep = semicolon]
+                           {data/zcopy-amd-hip-vega64-w.csv};
+            \addlegendentry{$\text{Blockgröße} = 128$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-256,
+                            col sep = semicolon]
+                           {data/zcopy-amd-hip-vega64-w.csv};
+            \addlegendentry{$\text{Blockgröße} = 256$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-512,
+                            col sep = semicolon]
+                           {data/zcopy-amd-hip-vega64-w.csv};
+            \addlegendentry{$\text{Blockgröße} = 512$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-1024,
+                            col sep = semicolon]
+                           {data/zcopy-amd-hip-vega64-w.csv};
+            \addlegendentry{$\text{Blockgröße} = 1024$} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{Bandbreite der Vega 64 (Schreiben, HIP)}
+\end{figure}
+
 \subsection{HIP-zcopy (NVIDIA)}
 \label{anhang:hip:nvzcopyfig}
 
@@ -601,7 +707,7 @@ struct writer
     \begin{tikzpicture}
         \begin{axis}[
             title = {zcopy -- Lesen + Schreiben -- generisch -- K20x},
-            xlabel = {Blöcke pro Multiprozessor},
+            xlabel = {Groups pro Multiprozessor},
             ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
             xmode = log,
             log basis x = 2,
@@ -624,30 +730,30 @@ struct writer
             \addplot table [x = blocks_per_sm, y = throughput-64,
                             col sep = semicolon]
                            {data/zcopy-nvidia-sycl-k20x-generic-rw.csv};
-            \addlegendentry{$\text{Blockgröße} = 64$} 
+            \addlegendentry{$\text{Group-Größe} = 64$} 
 
             \addplot table [x = blocks_per_sm, y = throughput-128,
                             col sep = semicolon]
                            {data/zcopy-nvidia-sycl-k20x-generic-rw.csv};
-            \addlegendentry{$\text{Blockgröße} = 128$} 
+            \addlegendentry{$\text{Group-Größe} = 128$} 
 
             \addplot table [x = blocks_per_sm, y = throughput-256,
                             col sep = semicolon]
                            {data/zcopy-nvidia-sycl-k20x-generic-rw.csv};
-            \addlegendentry{$\text{Blockgröße} = 256$} 
+            \addlegendentry{$\text{Group-Größe} = 256$} 
 
             \addplot table [x = blocks_per_sm, y = throughput-512,
                             col sep = semicolon]
                            {data/zcopy-nvidia-sycl-k20x-generic-rw.csv};
-            \addlegendentry{$\text{Blockgröße} = 512$} 
+            \addlegendentry{$\text{Group-Größe} = 512$} 
 
             \addplot table [x = blocks_per_sm, y = throughput-1024,
                             col sep = semicolon]
                            {data/zcopy-nvidia-sycl-k20x-generic-rw.csv};
-            \addlegendentry{$\text{Blockgröße} = 1024$} 
+            \addlegendentry{$\text{Group-Größe} = 1024$} 
         \end{axis}
     \end{tikzpicture}
-    \caption{K20x-Bandbreite für generische Blöcke (Lesen und Schreiben, SYCL)}
+    \caption{K20x-Bandbreite für generische Groups (Lesen und Schreiben, SYCL)}
 \end{figure}
 
 \begin{figure}[H]
@@ -655,7 +761,7 @@ struct writer
     \begin{tikzpicture}
         \begin{axis}[
             title = {zcopy -- Schreiben -- generisch -- K20x},
-            xlabel = {Blöcke pro Multiprozessor},
+            xlabel = {Groups pro Multiprozessor},
             ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
             xmode = log,
             log basis x = 2,
@@ -678,30 +784,30 @@ struct writer
             \addplot table [x = blocks_per_sm, y = throughput-64,
                             col sep = semicolon]
                            {data/zcopy-nvidia-sycl-k20x-generic-w.csv};
-            \addlegendentry{$\text{Blockgröße} = 64$} 
+            \addlegendentry{$\text{Group-Größe} = 64$} 
 
             \addplot table [x = blocks_per_sm, y = throughput-128,
                             col sep = semicolon]
                            {data/zcopy-nvidia-sycl-k20x-generic-w.csv};
-            \addlegendentry{$\text{Blockgröße} = 128$} 
+            \addlegendentry{$\text{Group-Größe} = 128$} 
 
             \addplot table [x = blocks_per_sm, y = throughput-256,
                             col sep = semicolon]
                            {data/zcopy-nvidia-sycl-k20x-generic-w.csv};
-            \addlegendentry{$\text{Blockgröße} = 256$} 
+            \addlegendentry{$\text{Group-Größe} = 256$} 
 
             \addplot table [x = blocks_per_sm, y = throughput-512,
                             col sep = semicolon]
                            {data/zcopy-nvidia-sycl-k20x-generic-w.csv};
-            \addlegendentry{$\text{Blockgröße} = 512$} 
+            \addlegendentry{$\text{Group-Größe} = 512$} 
 
             \addplot table [x = blocks_per_sm, y = throughput-1024,
                             col sep = semicolon]
                            {data/zcopy-nvidia-sycl-k20x-generic-w.csv};
-            \addlegendentry{$\text{Blockgröße} = 1024$} 
+            \addlegendentry{$\text{Group-Größe} = 1024$} 
         \end{axis}
     \end{tikzpicture}
-    \caption{K20x-Bandbreite für generische Blöcke (Schreiben, SYCL)}
+    \caption{K20x-Bandbreite für generische Groups (Schreiben, SYCL)}
 \end{figure}
 
 \begin{figure}[H]
@@ -709,7 +815,7 @@ struct writer
     \begin{tikzpicture}
         \begin{axis}[
             title = {zcopy -- Lesen + Schreiben -- optimiert -- K20x},
-            xlabel = {Blöcke pro Multiprozessor},
+            xlabel = {Groups pro Multiprozessor},
             ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
             xmode = log,
             log basis x = 2,
@@ -732,20 +838,20 @@ struct writer
             \addplot table [x = blocks_per_sm, y = throughput-192,
                             col sep = semicolon]
                            {data/zcopy-nvidia-sycl-k20x-optimized-rw.csv};
-            \addlegendentry{$\text{Blockgröße} = 192$} 
+            \addlegendentry{$\text{Group-Größe} = 192$} 
 
             \addplot table [x = blocks_per_sm, y = throughput-384,
                             col sep = semicolon]
                            {data/zcopy-nvidia-sycl-k20x-optimized-rw.csv};
-            \addlegendentry{$\text{Blockgröße} = 384$} 
+            \addlegendentry{$\text{Group-Größe} = 384$} 
 
             \addplot table [x = blocks_per_sm, y = throughput-768,
                             col sep = semicolon]
                            {data/zcopy-nvidia-sycl-k20x-optimized-rw.csv};
-            \addlegendentry{$\text{Blockgröße} = 768$} 
+            \addlegendentry{$\text{Group-Größe} = 768$} 
         \end{axis}
     \end{tikzpicture}
-    \caption{K20x-Bandbreite für optimierte Blöcke (Lesen und Schreiben, SYCL)}
+    \caption{K20x-Bandbreite für optimierte Groups (Lesen und Schreiben, SYCL)}
 \end{figure}
 
 \begin{figure}[H]
@@ -753,7 +859,7 @@ struct writer
     \begin{tikzpicture}
         \begin{axis}[
             title = {zcopy -- Schreiben -- optimiert -- K20x},
-            xlabel = {Blöcke pro Multiprozessor},
+            xlabel = {Groups pro Multiprozessor},
             ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
             xmode = log,
             log basis x = 2,
@@ -776,20 +882,20 @@ struct writer
             \addplot table [x = blocks_per_sm, y = throughput-192,
                             col sep = semicolon]
                            {data/zcopy-nvidia-sycl-k20x-optimized-w.csv};
-            \addlegendentry{$\text{Blockgröße} = 192$} 
+            \addlegendentry{$\text{Group-Größe} = 192$} 
 
             \addplot table [x = blocks_per_sm, y = throughput-384,
                             col sep = semicolon]
                            {data/zcopy-nvidia-sycl-k20x-optimized-w.csv};
-            \addlegendentry{$\text{Blockgröße} = 384$} 
+            \addlegendentry{$\text{Group-Größe} = 384$} 
 
             \addplot table [x = blocks_per_sm, y = throughput-768,
                             col sep = semicolon]
                            {data/zcopy-nvidia-sycl-k20x-optimized-w.csv};
-            \addlegendentry{$\text{Blockgröße} = 768$} 
+            \addlegendentry{$\text{Group-Größe} = 768$} 
         \end{axis}
     \end{tikzpicture}
-    \caption{K20x-Bandbreite für optimierte Blöcke (Schreiben, SYCL)}
+    \caption{K20x-Bandbreite für optimierte Groups (Schreiben, SYCL)}
 \end{figure}
 
 \begin{figure}[H]
@@ -797,7 +903,7 @@ struct writer
     \begin{tikzpicture}
         \begin{axis}[
             title = {zcopy -- Schreiben -- generisch und optimiert -- K20x},
-            xlabel = {Blöcke pro Multiprozessor},
+            xlabel = {Groups pro Multiprozessor},
             ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
             xmode = log,
             log basis x = 2,
@@ -820,15 +926,15 @@ struct writer
             \addplot table [x = blocks_per_sm, y = throughput-768,
                             col sep = semicolon]
                            {data/zcopy-nvidia-sycl-k20x-optimized-w.csv};
-            \addlegendentry{$\text{Blockgröße} = 768$} 
+            \addlegendentry{$\text{Group-Größe} = 768$} 
 
             \addplot table [x = blocks_per_sm, y = throughput-1024,
                             col sep = semicolon]
                            {data/zcopy-nvidia-sycl-k20x-generic-w.csv};
-            \addlegendentry{$\text{Blockgröße} = 1024$} 
+            \addlegendentry{$\text{Group-Größe} = 1024$} 
         \end{axis}
     \end{tikzpicture}
-    \caption{K20x-Bandbreite für generische und optimierte Blöcke (Schreiben,
+    \caption{K20x-Bandbreite für generische und optimierte Groups (Schreiben,
              SYCL)}
 \end{figure}
 
@@ -837,7 +943,7 @@ struct writer
     \begin{tikzpicture}
         \begin{axis}[
             title = {zcopy -- optimiert -- K20x},
-            xlabel = {Blöcke pro Multiprozessor},
+            xlabel = {Groups pro Multiprozessor},
             ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
             xmode = log,
             log basis x = 2,
@@ -868,7 +974,7 @@ struct writer
             \addlegendentry{Schreiben} 
         \end{axis}
     \end{tikzpicture}
-    \caption{K20x-Bandbreite für 768er-Blöcke (SYCL)}
+    \caption{K20x-Bandbreite für 768er-Groups (SYCL)}
 \end{figure}
 
 \subsection{HIP-Reduction (AMD)}
