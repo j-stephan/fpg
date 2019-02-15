@@ -43,7 +43,24 @@ TODO: kurze Architekturbeschreibung und warum float2 statt float4
 Die Messmethoden entsprechen dem in Abschnitt~\ref{nvidia:zcopy:methoden}
 für NVIDIA-GPUs geschilderten Vorgehen.
 
-TODO: Compilerflags, rocm-smi
+Die im Quelltext~\ref{amd:zcopy:befehle} zeigen die verwendeten Compiler-Flags
+sowie die Festsetzung der Multiprozessor-Taktrate.
+
+\begin{code}
+    \begin{minted}[fontsize=\small]{bash}
+# HC-Compiler
+hcc `hcc-config --cxxflags --ldflags` -O3 -std=c++17 \
+  -amdgpu-target=gfx900
+
+# HIP-Compiler (-amdgpu-target wird nicht unterstützt)
+hipcc -O3 -std=c++17
+
+# Taktrate
+rocm-smi --setsclk 7
+    \end{minted}
+    \caption{Compiler-Flags und Taktrate für zcopy}
+    \label{amd:zcopy:befehle}
+\end{code}
 
 \subsubsection{Ergebnisse}
 
@@ -310,6 +327,10 @@ theoretisch möglichen Bandbreite auch praktisch nutzen.
 \end{figure}
 
 \subsection{Reduction}
+
+\subsubsection{Implementierung}
+
+\subsubsection{Ergebnisse}
 
 \subsection{N-Body}
 
