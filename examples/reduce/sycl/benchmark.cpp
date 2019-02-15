@@ -80,16 +80,17 @@ namespace benchmark
                     auto rng = std::mt19937{rd()};
                     auto uid = std::uniform_int_distribution<>{0, 3};
                     std::generate(std::begin(data), std::end(data), [&]()
-                                  {
-                                      return uid(rng);
-                                  });
+                    {
+                        return uid(rng);
+                    });
 
                     auto result = std::vector<int>{};
-                    auto result_size = blocks_i * p.iterations + blocks_i;
-                    result.resize(result_size); 
+                    result.resize(blocks_i); 
                     std::fill(std::begin(result), std::end(result), 0);
 
                     auto min_time = std::numeric_limits<float>::max(); 
+
+                    // needs own scope or SYCL will crash
                     {
                         // copy to accelerator
                         auto data_gpu = acc::make_array(data.size());
@@ -115,10 +116,16 @@ namespace benchmark
                         // verify
                         acc::copy_d2h(result_gpu, result);
                     }
+
                     auto verify = std::accumulate(std::begin(data),
                                                   std::end(data), 0);
                     if(verify != result[0])
                     {
+                        std::cerr << "s = " << s << std::endl;
+                        std::cerr << "blocks_i = " << blocks_i << std::endl;
+                        std::cerr << "blocks_n = " << blocks_n << std::endl;
+                        std::cerr << "block_size = " << block_size << std::endl;
+                        std::cerr << "i = " << i << std::endl;
                         std::cerr << "Mismatch: expected " << verify
                                   << ", got: " << result[0] << std::endl;
                         std::exit(EXIT_FAILURE);

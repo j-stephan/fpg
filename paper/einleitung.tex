@@ -4,8 +4,143 @@
 \subsection{Motivation}
 \label{einleitung:motivation}
 
+Das Feld der \gls{gpgpu} ist seit 2006 vor allem durch NVIDIAs CUDA-Plattform
+und GPUs geprägt und dominiert worden. Auf der Hardware-Seite konnte die
+Konkurrenz (vor allem der GPU-Hersteller AMD) lange Zeit wenig entgegensetzen
+-- heute (November 2018) sind NVIDIA-GPUs in fünf der zehn leistungsstärksten
+Supercomputer vorhanden, darunter die ersten beiden Plätze. Auf der Liste der
+500 leistungsstärksten Supercomputer finden sich mit NVIDIA-GPUs bestückte
+Rechner insgesamt 126 Mal, GPUs des größten Konkurrenten AMD kein einziges Mal.
+Intels als GPU-Alternative vor- und mittlerweile zugunsten einer noch
+unbekannten zukünftigen Plattform (vgl.~\cite{intel2017}) eingestellten
+Xeon-Phi-Beschleuniger sind auf dieser Liste noch 30 Mal vertreten.
+(vgl.~\cite{top500})
+
+Softwareseitig entstand ab 2008 mit der von Apple entwickelten und vom
+Khronos-Industriekonsortium standardisierten \gls{opencl} ein offener und
+hardware-übergreifender Konkurrent der CUDA-Plattform, der zunächst von einer
+Reihe wichtiger Hersteller (einschließlich NVIDIA) unterstützt wurde. Im 
+Gegensatz zu CUDA wurde \gls{opencl} von Anfang an auf verschiedene Arten von
+Beschleunigern ausgelegt, wie etwa Systeme mit einem \gls{dsp} oder einem
+\gls{fpga}. Mit der Zeit zeigte sich jedoch, dass die Unterstützung durch die
+Hersteller mit jeder weiteren Revision des Standards abnahm; so ist die 2011
+erschienene \gls{opencl}-Version 1.2 bis heute die neueste Version, die von
+NVIDIA und AMD\footnote{AMD unterstützte zwischenzeitlich \gls{opencl} 2.0, ist
+jedoch infolge des Umbaus des eigenen Treiber- und Compute-Ökosystems auf
+\gls{opencl} 1.2 zurückgegangen.} vollständig unterstützt wird. Lediglich Intel
+bietet eine Implementierung eines modernen \gls{opencl}-Standards an, beschränkt
+sich dabei aber auf seine CPUs und integrierten GPUs. Eine
+\gls{opencl}-Implementierung für die neuesten Produktlinien der Xeon-Phi-Reihe,
+\textit{Knights Landing} und \textit{Knights Mill}, existiert nicht, während
+\gls{opencl} 1.0 (2008) die einzige verfügbare Version für \gls{fpga}s
+darstellt.
+
+Sowohl Khronos als auch AMD versuchen seit einigen Jahren, durch neue
+Technologien im Umfeld des \gls{hpc} wieder Anschluss an NVIDIA zu finden. Im
+März 2014 stellte Khronos den SYCL-Standard vor, der auf \gls{opencl}s Konzepten
+und Portabilität aufbaut, jedoch eine auf C++ basierende, deutlich modernere
+und angenehmere Programmierweise bieten soll. AMD folgte im April 2016 mit einer
+eigenen, quelloffenen Plattform namens \gls{rocm}, die neben einer
+Portabilitätsschicht zu CUDA (\gls{hip}) einen auf AMD-GPUs spezialisierten
+C++-Dialekt (\gls{hc}) bietet.
+
+Beide Ansätze befinden sich im Gegensatz zu CUDA noch am Anfang ihrer
+Entwicklung und erfahren laufend größere Änderungen sowie Feature-Updates. Eine
+vergleichende Untersuchung der bereits verfügbaren Fähigkeiten und Konzepte 
+sowohl untereinander als auch im Vergleich zu CUDA ist jedoch möglich und in
+der wissenschaftlichen Literatur bisher nicht aufzufinden.
+
 \subsection{Forschungsstand}
 \label{einleitung:forschung}
 
+Die wissenschaftliche Literatur betrachtet SYCL vornehmlich als
+Abstraktionsschicht über \gls{opencl}. Aus diesem Grund sind Untersuchungen, die
+sich direkt auf SYCL fokussieren, relativ selten.
+
+Das im März 2014 veröffentlichte SYCL wurde erstmals im August des selben Jahres
+von Trigkas untersucht. Zu diesem Zweck wurde SYCL mit \gls{opencl} und
+\gls{openmp} verglichen und auf Intels Xeon-Phi-Beschleunigern ausgeführt.
+(vgl.~\cite{trigkas2014})
+
+Cardoso da Silva et al.\ führten im Oktober 2016 ebenfalls einen Vergleich
+zwischen SYCL, OpenCL und OpenMP durch, als Hardware kamen hier Intels Xeon-CPUs
+zum Einsatz.
+(vgl.~\cite{dasilva2016})
+
+Jesenšek stellte 2017 eine SYCL-Implementierung für Intels
+Xeon-Phi-Prozessoren und das Betriebssystem Linux vor.
+(vgl.~\cite{jesensek2017})
+
+Im Mai 2017 zeigten Goli et al.\, dass SYCL zur Beschleunigung des
+Deep-Learning-Frameworks \textit{TensorFlow} eingesetzt werden kann.
+(vgl.~\cite{goli2017})
+
+Zur selben Zeit verwendeten Copik und Kaiser SYCL als Backend für das
+\gls{hpc}-Programmiermodell \textit{HPX.Compute}.
+(vgl.~\cite{copik2017})
+
+Im selben Monat untersuchten Doumoulakis et al.\ die Interoperabilität zwischen
+SYCL und \gls{opencl} auf GPUs und \gls{fpga}s.
+(vgl.~\cite{doumoulakis2017})
+
+Ebenfalls im selben Monat implementierten Aliaga et al.\ BLAS-Algorithmen auf
+der Basis von Ausdrucksbäumen und SYCL.
+(vgl.~\cite{aliaga2017})
+
+St Clere Smithe und Potter stellten im Mai 2018 ein energieeffizientes
+neuronales Netzwerk vor, das mittels SYCL implementiert wurde.
+(vgl.~\cite{stcleresmithe2018})
+
+Gleichzeitig zeigte Fare einen ersten Ansatz, der das Profiling von in SYCL
+geschriebenen Anwendungen ermöglicht.
+(vgl.~\cite{fare2018})
+
+Zur selben Zeit präsentierten Keryell und Yu eine Untersuchung von
+auf SYCL aufbauenden Programmen, die auf \gls{fpga}s ausgeführt werden.
+(vgl.~\cite{keryell2018})
+
+Afzal et al.\ lösten im Juli 2018 Maxwell-Gleichungen mit SYCL und verglichen
+die Performance mit einer vorherigen Implementierung in der Programmiersprache
+C.
+(vgl.~\cite{afzal2018})
+
+In der wissenschaftlichen Literatur tauchen die Begriffe \gls{rocm}, \gls{hc}
+und \gls{hip} erstmals 2016 auf. Während sich die Arbeiten der ersten
+Jahreshälfte vornehmlich mit der \gls{hsa} befassen und \gls{rocm} lediglich als
+verwendeten Software-Unterbau erwähnen (vgl.\ etwa \cite{li2016},
+\cite{larsson2016}), unternahm Sun im Juli 2016 den vermutlich ersten Vergleich
+zwischen \gls{hip} und CUDA (vgl.~\cite{sun2016}. Es folgten viele verschiedene
+Leistungsanalysen auf der Basis von \gls{rocm}:
+
+Im September 2016 veröffentlichten Sun et al.\ ihre Benchmark-Suite
+\textit{Hetero-Mark}, die vornehmlich die Leistungsfähigkeit von \gls{apu}s
+misst und dabei auf \gls{rocm} und \gls{hc} aufsetzt (vgl.~\cite{sunyifan2016}).
+Sun et al.\ nutzten \textit{Hetero-Mark} sowie das Framework \textit{DNNMark} im
+April 2018 erneut, um \gls{rocm} einer eingehenden Performance-Analyse zu
+unterziehen (vgl.~\cite{sun2018}). In die gleiche Richtung geht die im April
+2017 von Gómez-Luna et al.\ vorgestellte Benchmark-Suite \textit{Chai}
+(vgl.~\cite{gomezluna2017}). 
+
+Im Mai 2017 stellten Hou et al.\ Benchmarks vor, die auf der Ebene der Register,
+des L1-Caches und des \textit{shared memory} arbeiteten und in \gls{hc} und
+CUDA implementiert wurden. (vgl.~\cite{hou2017})
+
+Im Juli 2017 portierte Konstantinidis seine Sammlung von Micro-Benchmarks, die
+die Leistungsfähigkeit von CUDA-\gls{gpu}s auf der Instruktionsebene prüfen,
+mit der Hilfe von \gls{hip} auf die \gls{rocm}-Plattform.
+(vgl.~\cite{konstantinidis2017})
+
+Im Januar 2018 untersuchten Nobre et al.\ die Performanz und Genauigkeit von
+Fließkommazahlen mit halber Präzision auf AMD \gls{gpu}s.
+(vgl.~\cite{nobre2018})
+
 \subsection{Zielstellung}
 \label{einleitung:zielstellung}
+
+Das Ziel dieser Arbeit ist ein vergleichende Analyse der Programmiermodelle
+CUDA, SYCL und \gls{rocm} (bzw.\ \gls{hc} und \gls{hip}) auf GPUs der Hersteller
+NVIDIA und AMD. Dabei sollen einerseits die den jeweiligen Modellen zugrunde
+liegenden Fähigkeiten und Konzepte sowie die vorhandenen Ökosysteme verglichen,
+andererseits die konkret erreichbare Performanz anhand geeigneter Benchmarks
+ermittelt werden. Von den so gewonnenen Erkenntnissen werden Empfehlungen für 
+den zukünftigen Einsatz dieser Modelle im \gls{hpc}-Umfeld abgeleitet.

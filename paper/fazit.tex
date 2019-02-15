@@ -1,76 +1,17 @@
 \section{Fazit}
-
-\subsection{Entwicklungsstand}
-
-Es wurde gezeigt, dass Texterkennung in und -extraktion aus topographischen Karten mit der vorgestellten
-Netzwerkarchitektur möglich ist und gute Erkennungsraten liefert. Vorbedingung dafür ist das Vorliegen einer genügend
-großen Datenmenge für das \textit{Training}, da das Netzwerk ansonsten zu \textit{Overfitting} neigt. Künstliche
-\textit{Trainings}-Daten sind daher für ein funktionierendes Netzwerk essentiell.
-
-Die Nutzung der Frameworks \textit{Keras} und \textit{TensorFlow} ermöglichte eine einfache Umsetzung für die Nutzung
-der auf dem HPC-System \textit{Taurus} vorhandenen GPUs.
+\label{fazit}
 
 \subsection{Ausblick}
-
-\subsubsection{Qualität der Trainingsdaten und Erkennungsraten}
-
-Insbesondere die Gewinnung den historischen Schriftbildern entsprechender \textit{Trainings}-Daten gestaltete sich
-schwierig. In seiner aktuellen Fassung behilft sich der Datengenerator mit aus dem vorliegenden Kartenmaterial
-ausgeschnittenen Einzelbuchstaben, die dann aneinandergereiht werden; die Alternative besteht im mühevollen manuellen
-Ausschneiden der ganzen Wörter, wie es für diese Arbeit für die in Abschnitt~\ref{ergebnisse:daten} erwähnten
-Validierungsdaten getan wurde.
-
-Eine Verbesserung dieser Situation sowie daraus folgend der \textit{Inferenz}-Ergebnisse ließe sich vermutlich durch
-den Einsatz der Schriftarten \textit{Kursivschrift} (vgl.~\cite{kursivschrift}) und \textit{Roemisch}
-(vgl.~\cite{roemisch}) innerhalb des Datengenerators erreichen, da sie den historisch genutzten Schriftarten
-weitestgehend entsprechen.
-
-Ein weiterer Ansatz zur Verbesserung der Erkennungsrate könnte darin liegen, Vorder- und Hintergrund, das heißt Text
-und Karte, voneinander zu trennen und getrennt auszuwerten.
-
-Eine genauere Untersuchung erfordert das \textit{Training} mit Datensätzen, die größer als \num{250000} Bilder sind. So
-zeigte sich bei der Verwendung eines Datensatzes mit \num{500000} Bildern ein massiver Einbruch der Erkennungsrate,
-der noch unter der Rate eines Netzwerks, das mit \num{120000} Bildern trainiert wurde, lag. Dieses Verhalten konnte
-bisher noch nicht erklärt werden.
-
-\subsubsection{Variable Wortlängen}
-
-Das im Rahmen dieser Arbeit entwickelte Netzwerk ist zwar auf Texte mit einer fixen Wortlänge beschränkt, eignet sich
-prinzipiell aber auch für die Erkennung von Texten mit variabler Wortlänge. Hierzu bedarf es einer Untersuchung der
-folgenden Punkte:
+\label{fazit:ausblick}
 
 \begin{itemize}
-    \item Da das Netzwerk auf \gls{lstm}-Schichten basiert, ist eine vorherige Festsetzung der Dimensionen der
-          eingehenden Bilder erforderlich. In der Variante mit fixer Wortlänge ergibt sich die Breite eines Bildes
-          aus der Anzahl der vorhandenen Buchstaben (siehe Abschnitt~\ref{daten:bilderkennung}). Dagegen muss bei der
-          variablen Wortlänge eine gemeinsame Bildbreite für alle möglichen Wortlängen gefunden werden.
-    \item Ausgehend von dem vorherigen Punkt stellt sich die Frage, in welchem Format die künstlichen
-          \textit{Trainings}-Daten vorliegen sollen. Ein erster Ansatz, den Generator ausschließlich Bilder mit fester
-          Breite und Höhe, aber Texten mit verschiedener Schriftgröße generieren zu lassen und das Netzwerk auf diesen
-          Daten zu traineren, lieferte sehr schlechte Ergebnisse ($C < 0,2$ für den Trainingsdatensatz und
-          $C \approx 0,01$ für einen Validierungsdatensatz mit realen Daten). Eine Alternative könnte sein, das Netzwerk
-          ausschließlich mit künstlichen Daten der selben Wortlänge (z.B.\ einer vorher festgelegten Maximallänge) zu
-          trainieren. Dieses Netzwerk lässt man dann Worte verschiedener Breite erkennen. Ein erster Versuch mit einem
-          Netzwerk, das auf eine Wortlänge von 6 Buchstaben trainiert wurde, zeigte vielversprechende Ergebnisse für
-          \textbf{reale} Daten mit Wortlängen zwischen 2 und 8 Buchstaben ($C \approx 0,25$). Möglicherweise ließe sich
-          auch ein iteratives Lernverfahren umsetzen (das Netzwerk lernt erst Wörter der Länge 2, dann der Länge 3,
-          usw.\ bis zum Maximum).
+    \item Rechtsstreit Oracle - Google -> Ende für HIP?
+    \item SYCL auf FPGA
 \end{itemize}
 
-\subsubsection{Performance-Verbesserungen}
+\subsection{Notizen}
 
-Hinsichtlich des Laufzeitverhaltens steht eine genauere Untersuchung der effizienten Nutzung mehrerer GPUs aus. Eine
-solche Erhöhung des Parallelisierungsgrades ist aufgrund der Dauer des \textit{Trainings} wünschenswert und wird von
-\textit{Keras} und \textit{TensorFlow} prinzipiell unterstützt (\textit{Keras} bietet hier das
-\texttt{multi\_gpu\_model}-API). Erste Testläufe dazu haben bereits stattgefunden, es sind jedoch für einen effizienten
-Multi-GPU-Ansatz weitere Arbeiten notwendig.
+Die vollständigen Quelltexte der Benchmarks sowie die \LaTeX-Quelltexte dieser
+Arbeit sind öffentlich unter dem folgenden Link erreichbar:
 
-\subsubsection{Weitere Arbeiten}
-
-Zu untersuchen wäre ferner, inwieweit sich ein Netzwerk, das bereits auf ein ähnlich gelagertes Problem angelernt
-wurde (wie etwa die Texterkennung in Fotografien), im Rahmen von \textit{Transfer Learning} für die Texterkennung in
-topographischen Karten verwenden lässt.
-
-Schließlich wäre eine verbesserte \textit{Score}-Berechnung wünschenswert, die auch Sonderfälle wie die in
-Abschnitt~\ref{ergebnisse:erfolg} genannten berücksichtigen kann, beispielsweise mittels einer Substring-Suche.
-
+\url{https://github.com/j-stephan/fpg}

@@ -1,0 +1,520 @@
+\section{Messungen auf NVIDIA-GPUs}
+\label{nvidia}
+
+\subsection{Verwendete Hard- und Software}
+
+Die hier gezeigten Benchmark-Ergebnisse wurden auf verschiedenen Knoten des
+\gls{hpc}-Systems Taurus gemessen:
+
+\begin{itemize}
+    \item Ein Knoten der \texttt{gpu2}-Partition mit zwei GPUs des Modells Tesla
+          K20x (mit aktiviertem ECC).
+    \item Einem experimentellen Knoten mit je einer GPU der Modelle Tesla P100
+          und Tesla V100
+\end{itemize}
+
+Die Messungen fanden innerhalb der SCS5-Umgebung statt, in der die folgende
+Software verwendet wurde:
+
+\begin{itemize}
+    \item \texttt{CUDA/10.0.130} (Modulsystem)
+    \item \texttt{GCC/7.3.0-2.30} (Modulsystem)
+    \item \gls{hip} (Version 1.5.19061, ROCm-GitHub-Repository)
+    \item ComputeCpp (Codeplays SYCL-Implementierung, Version 1.0.5 für Ubuntu
+          14.04)
+\end{itemize}
+
+\subsection{zcopy}
+
+\subsubsection{Vorüberlegungen}
+
+Um eine optimale Ausnutzung der Speicherbandbreite zu erreichen, ist ein genauer
+Blick auf die verwendete Architektur erforderlich. Die K20x-GPUs weisen hier
+größere Unterschiede zu den P100- und V100-Modellen auf, die sich auf den
+betrachteten Benchmark auswirken können. Während die P100/V100-GPUs auf jedem
+Multiprozessor bei einfacher Genauigkeit \num{64} Hardware-Threads zur Verfügung
+haben, sind es bei den K20x-GPUs \num{192}. Ein Multiprozessor der
+P100/V100-GPUs kann somit zwei \textit{Warps} parallel ausführen, während auf
+der K20x-GPU sechs parallele \textit{Warps} pro Multiprozessor möglich sind. Die
+unterschiedliche \textit{Warp}-Zahl wirkt sich unter Umständen auf die
+Bandbreite des Speichers aus, da jeder K20x-Multiprozessor mehr Zugriffe
+benötigt als seine P100/V100-Gegenstücke. Aus diesem Grund werden auf der
+K20x-GPU und den P100/V100-GPUs Blockgrößen untersucht, die ein Vielfaches von
+\num{64} sind (bis \num{1024}). Zusätzlich werden auf der K20x Blockgrößen
+betrachtet, die ein Vielfaches von \num{192} sind (bis \num{768}), um eventuelle
+Effekte zu entdecken.
+
+Alle verwendeten NVIDIA-GPUs besitzen eine L1-Cacheline-Größe von \num{128}
+Byte. Speicherzugriffe der \textit{Warps} werden auf \textit{Half-Warps} (also
+\num{16} Threads des \textit{Warps}) aufgeteilt. Sofern alle Threads eines
+\textit{Half Warps} benachbarte \num{8}-Byte-Sequenzen laden, lassen sich diese
+Zugriffe in einer einzigen Cacheline vereinen, was die pro Thread verwendete
+Speicherbandbreite drastisch reduziert und eine insgesamt höhere Auslastung
+erlaubt.
+
+Um eine höhere Auslastung des Speicher-Controllers zu erreichen und die Anzahl
+der notwendigen Schleifendurchläufe innerhalb des Kernels zu verringern, wodurch
+sich die Zahl abhängiger Instruktionen verringert, werden die \num{8} Byte pro
+Thread in diesem Benchmark verdoppelt. Jeder Thread lädt also \num{16} Byte in
+Form eines Elements vom Typ \texttt{float4}. Die Anhang befindlichen
+Quelltexte~\ref{anhang:cuda:zcopy} (CUDA), \ref{anhang:hip:zcopy} (\gls{hip})
+und \ref{anhang:sycl:zcopy} (SYCL) zeigen die Kernel-Implementierungen der
+verschiedenen Spracherweiterungen.
+
+\subsubsection{Messmethoden}
+\label{nvidia:zcopy:methoden}
+
+Der Speicher der GPU wurde zunächst mit zwei gleich großen Datenfeldern $A$ und
+$B$ befüllt, die jeweils etwas weniger als die Hälfte des GPU-Speichers
+einnahmen und $n$ \texttt{float4}-Elemente umfassten. Diese wurden mit Nullen
+($A$) bzw.\ \textit{NaN} ($B$) initialisiert. Anschließend wurden die Kernel für
+jede Block-Größe jeweils zehn Mal ausgeführt, wobei für jeden Kernel-Durchlauf
+die benötigte Zeit über die Event-Funktionalitäten der verschiedenen
+Spracherweiterungen gemessen wurde. Der minimale Zeitbedarf $t_{\text{min}}$
+(in \si{\second}) jedes Kernels wird als Grundlage für die Berechnung der
+Bandbreite $B$ (in \si{\gibi\byte\per\second}) genommen:
+
+\[
+    B = \frac{k \cdot \text{sizeof(\texttt{float4})} \cdot n}{t_\text{min}},
+\]
+
+wobei der Faktor $k$ die Werte $2 \cdot 10^{-9}$ (kombinierter Lese- und
+Schreibzugriff) oder $1 \cdot 10^{-9}$ (Schreibzugriff) annehmen kann.
+
+\subsubsection{Ergebnisse}
+
+Ein Blick auf die mit CUDA ermittelten Ergebnisse zeigt, dass die K20x-GPU bei
+Speicherzugriffen von größeren Thread-Blöcken als auch von vielen Thread-Blöcken
+profitiert. Dies gilt sowohl für die \glqq generischen\grqq\ Blockgrößen, die
+ein Vielfaches von \num{64} darstellen (siehe die
+Abbildungen~\ref{nvidia:zcopy:k20xgenerischrw} und
+\ref{nvidia:zcopy:k20xgenerischw}), als auch die auf die Kepler-Architektur
+angepassten Blockgrößen (siehe die
+Abbildungen~\ref{nvidia:zcopy:k20xangepasstrw} und
+\ref{nvidia:zcopy:k20xangepasstw}). Außerdem bestätigt sich die Annahme, dass
+mit der angepassten Blockgröße eine etwas bessere Bandbreite erzielt werden kann
+(siehe Abbildung~\ref{nvidia:zcopy:k20xvergleich}). Dies hilft insbesondere dem
+kombinierten Lese- und Schreibvorgang, der dadurch bei einer großen Blockzahl
+nahezu die selbe Bandbreite wie der reine Schreibvorgang erreicht (siehe
+Abbildung~\ref{nvidia:zcopy:k20xrwwo}).
+
+\begin{figure}
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {zcopy -- Lesen + Schreiben -- generisch -- K20x},
+            xlabel = {Blöcke pro Multiprozessor},
+            ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
+            xmode = log,
+            log basis x = 2,
+            xmin = 1, xmax = 8192,
+            ymin = 40, ymax = 190,
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = south east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            width = 0.75\textwidth,
+            scale only axis,
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = blocks_per_sm, y = throughput-64,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-cuda-k20x-generic-rw.csv};
+            \addlegendentry{$\text{Blockgröße} = 64$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-128,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-cuda-k20x-generic-rw.csv};
+            \addlegendentry{$\text{Blockgröße} = 128$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-256,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-cuda-k20x-generic-rw.csv};
+            \addlegendentry{$\text{Blockgröße} = 256$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-512,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-cuda-k20x-generic-rw.csv};
+            \addlegendentry{$\text{Blockgröße} = 512$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-1024,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-cuda-k20x-generic-rw.csv};
+            \addlegendentry{$\text{Blockgröße} = 1024$} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{K20x-Bandbreite für generische Blöcke (Lesen und Schreiben, CUDA)}
+    \label{nvidia:zcopy:k20xgenerischrw}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {zcopy -- Schreiben -- generisch -- K20x},
+            xlabel = {Blöcke pro Multiprozessor},
+            ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
+            xmode = log,
+            log basis x = 2,
+            xmin = 1, xmax = 8192,
+            ymin = 70, ymax = 190,
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = south east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            width = 0.75\textwidth,
+            scale only axis,
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = blocks_per_sm, y = throughput-64,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-cuda-k20x-generic-w.csv};
+            \addlegendentry{$\text{Blockgröße} = 64$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-128,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-cuda-k20x-generic-w.csv};
+            \addlegendentry{$\text{Blockgröße} = 128$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-256,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-cuda-k20x-generic-w.csv};
+            \addlegendentry{$\text{Blockgröße} = 256$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-512,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-cuda-k20x-generic-w.csv};
+            \addlegendentry{$\text{Blockgröße} = 512$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-1024,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-cuda-k20x-generic-w.csv};
+            \addlegendentry{$\text{Blockgröße} = 1024$} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{K20x-Bandbreite für generische Blöcke (Schreiben, CUDA)}
+    \label{nvidia:zcopy:k20xgenerischw}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {zcopy -- Lesen + Schreiben -- optimiert -- K20x},
+            xlabel = {Blöcke pro Multiprozessor},
+            ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
+            xmode = log,
+            log basis x = 2,
+            xmin = 1, xmax = 8192,
+            ymin = 40, ymax = 190,
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = south east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            width = 0.75\textwidth,
+            scale only axis,
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = blocks_per_sm, y = throughput-192,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-cuda-k20x-optimized-rw.csv};
+            \addlegendentry{$\text{Blockgröße} = 192$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-384,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-cuda-k20x-optimized-rw.csv};
+            \addlegendentry{$\text{Blockgröße} = 384$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-768,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-cuda-k20x-optimized-rw.csv};
+            \addlegendentry{$\text{Blockgröße} = 768$} 
+
+        \end{axis}
+    \end{tikzpicture}
+    \caption{K20x-Bandbreite für optimierte Blöcke (Lesen und Schreiben, CUDA)}
+    \label{nvidia:zcopy:k20xangepasstrw}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {zcopy -- Schreiben -- optimiert -- K20x},
+            xlabel = {Blöcke pro Multiprozessor},
+            ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
+            xmode = log,
+            log basis x = 2,
+            xmin = 1, xmax = 8192,
+            ymin = 70, ymax = 190,
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = south east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            width = 0.75\textwidth,
+            scale only axis,
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = blocks_per_sm, y = throughput-192,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-cuda-k20x-optimized-w.csv};
+            \addlegendentry{$\text{Blockgröße} = 192$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-384,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-cuda-k20x-optimized-w.csv};
+            \addlegendentry{$\text{Blockgröße} = 384$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-768,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-cuda-k20x-optimized-w.csv};
+            \addlegendentry{$\text{Blockgröße} = 768$} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{K20x-Bandbreite für optimierte Blöcke (Schreiben, CUDA)}
+    \label{nvidia:zcopy:k20xangepasstw}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {zcopy -- Schreiben -- generisch und optimiert -- K20x},
+            xlabel = {Blöcke pro Multiprozessor},
+            ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
+            xmode = log,
+            log basis x = 2,
+            xmin = 1, xmax = 8192,
+            ymin = 175, ymax = 188,
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = south east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            width = 0.75\textwidth,
+            scale only axis,
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = blocks_per_sm, y = throughput-768,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-cuda-k20x-optimized-w.csv};
+            \addlegendentry{$\text{Blockgröße} = 768$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-1024,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-cuda-k20x-generic-w.csv};
+            \addlegendentry{$\text{Blockgröße} = 1024$} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{K20x-Bandbreite für generische und optimierte Blöcke (Schreiben,
+             CUDA)}
+    \label{nvidia:zcopy:k20xvergleich}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {zcopy -- optimiert -- K20x},
+            xlabel = {Blöcke pro Multiprozessor},
+            ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
+            xmode = log,
+            log basis x = 2,
+            xmin = 1, xmax = 8192,
+            % ymin = 175, ymax = 188,
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = south east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            width = 0.75\textwidth,
+            scale only axis,
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = blocks_per_sm, y = throughput-768,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-cuda-k20x-optimized-rw.csv};
+            \addlegendentry{Lesen + Schreiben} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-768,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-cuda-k20x-optimized-w.csv};
+            \addlegendentry{Schreiben} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{K20x-Bandbreite für 768er-Blöcke (CUDA)}
+    \label{nvidia:zcopy:k20xrwwo}
+\end{figure}
+
+Die mit \gls{hip} und SYCL ermittelten Ergebnisse zeigen ein ähnliches Bild
+(siehe die angehängten Abbildungen in den
+Abschnitten~\ref{anhang:hip:nvzcopyfig} (\gls{hip}) und
+\ref{anhang:sycl:zcopyfig} (SYCL)).
+
+Hinsichtlich der erreichten Speicherbandbreite bestehen zwischen den
+Spracherweiterungen keine nennenswerten Unterschiede, wie die
+Abbildung~\ref{nvidia:zcopy:k20xexts} zeigt.
+
+\begin{figure}
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {zcopy -- Schreiben -- optimiert -- K20x},
+            xlabel = {Blöcke pro Multiprozessor},
+            ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
+            xmode = log,
+            log basis x = 2,
+            xmin = 1, xmax = 8192,
+            ymin = 175, ymax = 190,
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = south east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            width = 0.75\textwidth,
+            scale only axis,
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = blocks_per_sm, y = throughput-768,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-cuda-k20x-optimized-w.csv};
+            \addlegendentry{CUDA} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-768,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-hip-k20x-optimized-w.csv};
+            \addlegendentry{HIP} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-768,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-sycl-k20x-optimized-w.csv};
+            \addlegendentry{SYCL} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{K20x-Bandbreite für 768er-Blöcke (Schreiben)}
+    \label{nvidia:zcopy:k20xexts}
+\end{figure}
+
+Die K20x-GPU erreicht etwa 75\% der theoretisch möglichen Bandbreite (siehe
+Abbildung~\ref{nvidia:zcopy:k20xmax}). Dies ist durch das aktivierte ECC und
+die auf dem Taurus-System nicht steuerbaren Taktraten der GPU zu erklären. Für
+den Reduction-Benchmark wird daher eine tatsächlich erreichbare Obergrenze von
+\SI{188}{\gibi\byte\per\second} angenommen.
+
+\begin{figure}
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {zcopy -- optimiert -- K20x},
+            xlabel = {Blöcke pro Multiprozessor},
+            ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
+            xmode = log,
+            log basis x = 2,
+            xmin = 1, xmax = 8192,
+            ymin = 70, ymax = 260,
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = south east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            width = 0.75\textwidth,
+            scale only axis,
+            cycle list name = exotic,
+            extra y ticks = 249.6,
+            extra y tick labels = {$249.6$},
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = blocks_per_sm, y = throughput-768,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-cuda-k20x-optimized-rw.csv};
+            \addlegendentry{Lesen+Schreiben} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-768,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-cuda-k20x-optimized-w.csv};
+            \addlegendentry{Schreiben} 
+
+            \addplot table [x = blocks_per_sm, y = peak, col sep = semicolon]
+                           {data/zcopy-nvidia-k20x-peak.csv};
+            \addlegendentry{Peak}
+        \end{axis}
+    \end{tikzpicture}
+    \caption{Theoretische und praktische K20x-Bandbreite für 768er-Blöcke}
+    \label{nvidia:zcopy:k20xmax}
+\end{figure}
+
+\subsection{Reduction}
+
+\subsection{N-Body}
+
+Ein gesonderter Vergleich ist zwischen CUDA und SYCL nötig, da das
+experimentelle Backend für NVIDIA-GPUs der ComputeCpp-Implementierung die
+Funktion \texttt{rsqrtf} für die reziproke Quadratwurzel nicht unterstützt. Da
+die äquivalente Berechnung \texttt{1.f / sqrtf} deutlich langsamer ist, wurde
+stattdessen eine schnellere, weniger genaue Implementierung der Funktion
+\texttt{rsqrtf} aus dem Quelltext des Spiels \textit{Quake 3 Arena} übernommen
+(siehe Quelltext~\ref{nvidia:nbody:qrsqrt} für eine normale
+C++-Implementierung).
+
+\begin{code}
+    \begin{minted}[fontsize=\small]{c++}
+auto Q_rsqrt(float number) -> float
+{
+    auto x2 = number * 0.5f;
+    auto y = number;
+    auto i = *(reinterpret_cast<std::int32_t*>(&y));
+
+    i = 0x5f3759df - (i >> 1);
+
+    y = *(reinterpret_cast<float*>(&i));
+    y *= 1.5f - (x2 * y * y);
+
+    return y;
+}
+    \end{minted}
+    \caption{Quake-3-Implementierung der rsqrt-Funktion}
+    \label{nvidia:nbody:qrsqrt}
+\end{code}

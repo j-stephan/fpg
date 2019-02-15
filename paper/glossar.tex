@@ -1,9 +1,69 @@
 \makeglossaries
 
-\newacronym{crf}{CRF}{\textit{conditional random field}}
-\newacronym{ctc}{CTC}{\textit{connectionist temporal classifier}}
+\newacronym{api}{API}{\textit{application programming interface}}
+\newacronym{apu}{APU}{\textit{accelerated processing unit}}
+
+\newacronym{cpu}{CPU}{\textit{central processing unit}}
+
+\newacronym{dsp}{DSP}{\textit{digital signal processor}}
+
+\newacronym{fma}{FMA}{\textit{fused multiply-add}}
+\newacronym{fpga}{FPGA}{\textit{field programmable gate array}}
+
+\newacronym{gpgpu}{GPGPU}{\textit{general purpose computation on graphics processing unit}}
 \newacronym{gpu}{GPU}{\textit{graphics processing unit}}
-\newacronym{hmm}{HMM}{\textit{hidden Markov model}}
-\newacronym{lstm}{LSTM}{\textit{long short-term memory}}
-\newacronym{rnn}{RNN}{\textit{recurrent neural network}}
-\newacronym{ocr}{OCR}{\textit{optical character recognition}}
+
+\newacronym{hc}{HC}{\textit{Heterogeneous Compute API}}
+\newacronym{hcc}{HCC}{\textit{Heterogeneous Compute Compiler}}
+\newacronym{hip}{HIP}{\textit{Heterogeneous-Computing Interface for Portability}}
+\newacronym{hpc}{HPC}{\textit{high-performance computing}}
+\newacronym{hsa}{HSA}{\textit{Heterogeneous System Architecture}}
+
+\newacronym{numa}{NUMA}{\textit{non-uniform memory access}}
+
+\newacronym{openacc}{OpenACC}{\textit{Open Accelerators}}
+\newacronym{opencl}{OpenCL}{\textit{Open Compute Language}}
+\newacronym{openmp}{OpenMP}{\textit{Open Multi-Processing}}
+
+\newacronym{rock}{ROCk}{\textit{Radeon Open Compute Kernel driver}}
+\newacronym{rocm}{ROCm}{\textit{Radeon Open Compute Platform}}
+\newacronym{rocr}{ROCr}{\textit{Radeon Open Compute Platform Runtime}}
+\newacronym{roct}{ROCt}{\textit{Radeon Open Compute Thunk Interface}}
+
+\newacronym{simd}{SIMD}{\textit{single-instruction, multiple data}}
+\newacronym{simt}{SIMT}{\textit{single-instruction, multiple thread}}
+
+\newglossaryentry{kernel}{name = Kernel,
+                          description = {Programm, das auf einem Beschleuniger,
+                                         wie etwa einer GPU, ausgeführt wird.},
+                          plural = Kernel}
+\newglossaryentry{host}{name = Host,
+                        description = {Gerät, das einen Kernel auf dem Device
+                                       ausführen lässt. Üblicherweise das Gerät,
+                                       auf dem das Betriebssystem läuft, etwa
+                                       ein PC oder ein Knoten auf einem
+                                       Superrechner.},
+                        plural = Hosts}
+\newglossaryentry{device}{name = Device,
+                          description = {Gerät, das einen Kernel ausführt. Im
+                                         Kontext dieser Arbeit stets eine GPU.},
+                          plural = Devices}
+\newglossaryentry{singlesource}{name = {single-source compilation},
+                                description = {Die Quelltexte für Host und
+                                               Device werden gleichzeitig vom
+                                               Compiler für die
+                                               Zielarchitekturen übersetzt.}}
+\newglossaryentry{splitsource}{name = {split-source compilation},
+                               description = {Die Quelltexte für Host und
+                                              Device werden getrennt kompiliert.
+                                              Der Host-Quelltext wird von einem
+                                              normalen Compiler übersetzt, der
+                                              Device-Quelltext erst zur Laufzeit
+                                              des Programms von einem weiteren
+                                              Compiler.}}
+\newglossaryentry{flops}{name = {FLOPS},
+                         description = {Fließkommaoperationen pro Sekunde
+                                        (engl. \textit{floating point operations
+                                        per second}). Steht häufig auch nur für
+                                        den Plural von FLOP.}
+}
