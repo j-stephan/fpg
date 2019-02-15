@@ -35,6 +35,7 @@ __global__ void write(float4* __restrict__ B, std::size_t num_elems)
 \end{code}
 
 \subsection{Reduction}
+\label{anhang:cuda:reduction}
 
 \subsection{N-Body}
 
@@ -73,6 +74,8 @@ __global__ void write(float4* __restrict__ B, std::size_t num_elems);
 \end{code}
 
 \subsection{Reduction}
+\label{anhang:hip:reduction}
+
 \subsection{N-Body}
 
 \begin{code}
@@ -187,6 +190,8 @@ void write(hc::tiled_index<1> idx, hc::array_view<DataT, 1> B,
 \end{code}
 
 \subsection{Reduction}
+\label{anhang:hc:reduction}
+
 \subsection{N-Body}
 
 \begin{code}
@@ -308,6 +313,8 @@ struct writer
 \end{code}
 
 \subsection{Reduction}
+\label{anhang:sycl:reduction}
+
 \subsection{N-Body}
 
 \section{Benchmark-Ergebnisse}

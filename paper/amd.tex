@@ -36,7 +36,29 @@ Das verwendete Betriebssystem war Ubuntu 16.04 mit der Linux-Kernel-Version
 
 \subsubsection{Vorüberlegungen}
 
-TODO: kurze Architekturbeschreibung und warum float2 statt float4
+Die in Abschnitt~\ref{nvidia:zcopy:vorueberlegungen} für NVIDIA-GPUs gemachten
+Überlegungen können nicht ohne Anpassungen für AMD-GPUs übernommen werden, da
+sich die Multiprozessor-Architekturen unterscheiden.
+
+Jeder Multiprozessor einer Vega-GPU besteht aus vier \gls{simd}-Einheiten. Eine
+\gls{simd}-Einheit verfügt über 16 Vektor-ALUs (VALUs), die synchron auf jeweils
+einem \textit{work-item} arbeiten. Die vier \gls{simd}-Einheiten arbeiten
+parallel eine \textit{wavefront} ab, die 64 \textit{work-items} umfasst.
+
+Anders ausgedrückt kann jeder Multiprozessor genau 64 Threads abarbeiten, wobei
+diese auf dem Multiprozessor noch einmal in Gruppen von 16 Threads aufgeteilt
+werden. Ausgehend von NVIDIAs \textit{half-warps} könnte man diese Gruppen auch
+als \textit{quarter-wavefronts} bezeichnen, wenngleich dieser Begriff offiziell
+nicht existiert.
+
+Die Multiprozessoren verfügen über einen L1-Cache, der eine Cacheline-Größe von
+64 Byte aufweist. Um jede \gls{simd}-Einheit effizient zu befüllen, muss jeder
+Thread genau 4 Bytes lesen, was einem \texttt{float} entspräche. Um den
+Speicher-Controller besser auszulasten, wird dieser Wert auf 8 Byte pro Thread
+erhöht (Datentyp \texttt{hc::short\_vector::float\_2}). Die transportierte
+Datenmenge pro Wavefront beträgt somit $8 \cdot 64 = 512$ Bytes und entspricht
+damit der der CUDA-Variante ($16 \cdot 32 = 512$), bei der ein
+\texttt{float4}-Vektor verwendet wurde.
 
 \subsubsection{Messmethoden}
 
@@ -330,6 +352,10 @@ theoretisch möglichen Bandbreite auch praktisch nutzen.
 
 \subsubsection{Implementierung}
 
+Die Implementierungen des Reduktionskernels sind dieser Arbeit angehängt und
+befinden sich in den Abschnitten~\ref{anhang:hc:reduction} (\gls{hc}) und
+\ref{anhang:hip:reduction} (\gls{hip}).
+
 \subsubsection{Ergebnisse}
 
 \subsection{N-Body}
@@ -382,6 +408,8 @@ wurde für den weiteren Verlauf der Messungen ein Ausrollfaktor von 8 festgelegt
             legend cell align = left,
             legend pos = outer north east,
             no markers,
+            every axis plot/.append style = {very thick},
+            cycle list name = exotic,
             /pgf/number format/.cd, use comma
         ]
             \addplot table [x = count, y = gflops-hc, col sep = semicolon]
