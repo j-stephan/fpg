@@ -474,22 +474,22 @@ in Abbildung~\ref{vergleich:anforderungen:aufgabensicht:graph} mit
 
 \begin{code}
     \begin{minted}[fontsize=\small]{c++}
-        A<<<..., stream1>>>();
-        // eventA wird ausgelöst, sobald A fertig ist
-        cudaEventRecord(eventA, stream1);
+A<<<..., stream1>>>();
+// eventA wird ausgelöst, sobald A fertig ist
+cudaEventRecord(eventA, stream1);
 
-        B<<<..., stream1>>>(); // wartet automatisch auf A
+B<<<..., stream1>>>(); // wartet automatisch auf A
 
-        // stream2 wartet auf eventA
-        cudaStreamWaitEvent(stream2, eventA);
-        // C kann jetzt ausgeführt werden
-        C<<<..., stream2>>>();
-        // eventC wird ausgelöst, sobald C fertig ist
-        cudaEventRecord(eventC, stream2);
+// stream2 wartet auf eventA
+cudaStreamWaitEvent(stream2, eventA);
+// C kann jetzt ausgeführt werden
+C<<<..., stream2>>>();
+// eventC wird ausgelöst, sobald C fertig ist
+cudaEventRecord(eventC, stream2);
 
-        // stream1 wartet auf eventC
-        cudaStreamEvent(stream1, eventC);
-        D<<<..., stream1>>>(); // wartet automatisch auf B
+// stream1 wartet auf eventC
+cudaStreamEvent(stream1, eventC);
+D<<<..., stream1>>>(); // wartet automatisch auf B
     \end{minted}
     \caption{Aufgabengraph mit \textit{streams}}
     \label{vergleich:cuda:aufgabensicht:streams}
@@ -509,19 +509,19 @@ Implementierung.
 
 \begin{code}
     \begin{minted}[fontsize=\small]{c++}
-        cudaGraphCreate(&graph);
+cudaGraphCreate(&graph);
 
-        // Abhängigkeiten definieren
-        cudaGraphAddNode(graph, A, {}, ...);
-        cudaGraphAddNode(graph, B, {A}, ...);
-        cudaGraphAddNode(graph, C, {A}, ...);
-        cudaGraphAddNode(graph, D, {B, C}, ...);
+// Abhängigkeiten definieren
+cudaGraphAddNode(graph, A, {}, ...);
+cudaGraphAddNode(graph, B, {A}, ...);
+cudaGraphAddNode(graph, C, {A}, ...);
+cudaGraphAddNode(graph, D, {B, C}, ...);
 
-        // Graph-Instanz erzeugen
-        cudaGraphInstantiate(&instance, graph);
+// Graph-Instanz erzeugen
+cudaGraphInstantiate(&instance, graph);
 
-        // Graph-Instanz auf stream ausführen
-        cudaGraphLaunch(instance, stream);
+// Graph-Instanz auf stream ausführen
+cudaGraphLaunch(instance, stream);
     \end{minted}
     \caption{Aufgabengraph mit \textit{CUDA Graphs}}
     \label{vergleich:cuda:aufgabensicht:graph}
