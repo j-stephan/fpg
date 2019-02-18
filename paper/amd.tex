@@ -353,12 +353,27 @@ theoretisch möglichen Bandbreite auch praktisch nutzen.
 \subsubsection{Implementierung}
 
 Die Implementierungen des Reduktionskernels sind dieser Arbeit angehängt und
-befinden sich in den Abschnitten~\ref{anhang:hc:reduction} (\gls{hc}) und
+befinden sich in den Quelltexten~\ref{anhang:hc:reduction} (\gls{hc}) und
 \ref{anhang:hip:reduction} (\gls{hip}).
+
+\subsubsection{Messmethoden}
+
+Die Messmethoden entsprechen den in Abschnitt~\ref{nvidia:reduction:methoden}
+für die NVIDIA-Implementierungen geschilderten.
 
 \subsubsection{Ergebnisse}
 
-\subsection{N-Body}
+Wie in der Abbildung~\ref{amd:reduction:hc} zu sehen ist, sind 256 Threads die
+beste Tile-Größe der HC-Implementierung, während zwei Tiles dieser Größe die
+beste Anzahl pro Multiprozessor darstellen. Dies gilt auch für HIP (siehe
+Abbildung~\ref{amd:reduction:hip}).
+
+Im direkten Vergleich der Spracherweiterungen wird sichtbar, dass sich die
+Ergebnisse des zcopy-Benchmarks bei der Reduktion bestätigen lassen. Wieder
+erreichen \gls{hc} und \gls{hip} eine ähnliche Bandbreite, wobei \gls{hip}
+konstant und messbar bessere Werte erreicht. Beide Implementierungen kommen
+außerdem sehr nah an die tatsächlich erreichbare Bandbreite heran, die im
+zcopy-Benchmark ermittelt wurde (siehe Abbildung~\ref{amd:reduction:peak}).
 
 \subsubsection{Implementierung}
 
@@ -447,6 +462,8 @@ wurde für den weiteren Verlauf der Messungen ein Ausrollfaktor von 8 festgelegt
             legend cell align = left,
             legend pos = outer north east,
             no markers,
+            every axis plot/.append style = {very thick},
+            cycle list name = exotic,
             /pgf/number format/.cd, use comma
         ]
             \addplot table [x = count, y = gflops-hip, col sep = semicolon]
@@ -491,6 +508,8 @@ daher eine Kachelgröße von $p = 256$ angenommen.
             legend cell align = left,
             legend pos = outer north east,
             no markers,
+            every axis plot/.append style = {very thick},
+            cycle list name = exotic,
             /pgf/number format/.cd, use comma
         ]
             \addplot table [x = tilesize, y = gflops-hc, col sep = semicolon]
@@ -528,6 +547,8 @@ daher eine Kachelgröße von $p = 256$ angenommen.
             legend cell align = left,
             legend pos = outer north east,
             no markers,
+            every axis plot/.append style = {very thick},
+            cycle list name = exotic,
             /pgf/number format/.cd, use comma
         ]
             \addplot table [x = tilesize, y = gflops-hip, col sep = semicolon]
@@ -572,6 +593,8 @@ identisches Ergebnis zu erzeugen (siehe Quelltexte~\ref{amd:nbody:isahc} und
             legend cell align = left,
             legend pos = outer north east,
             no markers,
+            every axis plot/.append style = {very thick},
+            cycle list name = exotic,
             /pgf/number format/.cd, use comma,
             ybar,
             width = 0.75\textwidth,

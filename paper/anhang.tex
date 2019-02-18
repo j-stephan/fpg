@@ -74,7 +74,55 @@ __global__ void write(float4* __restrict__ B, std::size_t num_elems);
 \end{code}
 
 \subsection{Reduction}
-\label{anhang:hip:reduction}
+
+\begin{code}
+    \begin{minted}[breaklines,breakafter=\,,escapeinside=||,fontsize=\small]{cuda}
+__global__ void block_reduce(const int* __restrict__ data,
+                                   int* __restrict__ result,
+                                   std::size_t size)
+{
+    __shared__ int scratch[1024]; 
+
+    auto i = |\textcolor{keyword-green}{hipBlockIdx\_x}| * |\textcolor{keyword-green}{hipBlockDim\_x}| + |\textcolor{keyword-green}{hipThreadIdx\_x}|;
+    if(i >= size) return;
+
+    auto tsum = data[i];
+
+    auto grid_size = |\textcolor{keyword-green}{hipGridDim\_x}| * |\textcolor{keyword-green}{hipBlockDim\_x}|;
+    i += grid_size;
+
+    while((i + 3 * grid_size) < size) {
+        tsum += data[i] + data[i + grid_size] +
+                data[i + 2 * grid_size] + data[i + 3 * grid_size];
+            i += 4 * grid_size;
+    }
+    while(i < size) { // noch fehlende Elemente
+        tsum += data[i];
+        i += grid_size;
+    }
+
+    scratch[|\textcolor{keyword-green}{hipThreadIdx\_x}|] = tsum;
+    __syncthreads();
+
+    #pragma unroll
+    for(auto bs = |\textcolor{keyword-green}{hipBlockDim\_x}|, bsup = (|\textcolor{keyword-green}{hipBlockDim\_x}| + 1) / 2;
+             bs > 1; bs /= 2, bsup = (bs + 1) / 2) {
+        auto cond = |\textcolor{keyword-green}{hipThreadIdx\_x}| < bsup &&
+            (|\textcolor{keyword-green}{hipThreadIdx\_x}| + bsup) < |\textcolor{keyword-green}{hipBlockDim\_x}| &&
+            (|\textcolor{keyword-green}{hipBlockIdx\_x}| * |\textcolor{keyword-green}{hipBlockDim\_x}| + |\textcolor{keyword-green}{hipThreadIdx\_x}| + bsup)
+            < size;
+
+        if(cond)
+            scratch[|\textcolor{keyword-green}{hipThreadIdx\_x}|] += scratch[|\textcolor{keyword-green}{hipThreadIdx\_x}| + bsup];
+        __syncthreads();
+    }
+
+    if(|\textcolor{keyword-green}{hipThreadIdx\_x}| == 0) result[|\textcolor{keyword-green}{hipBlockIdx\_x}|] = scratch[0];
+}
+    \end{minted}
+    \caption{Reduce -- HIP-Implementierung}
+    \label{anhang:hip:reduction}
+\end{code}
 
 \subsection{N-Body}
 
@@ -190,7 +238,55 @@ void write(hc::tiled_index<1> idx, hc::array_view<DataT, 1> B,
 \end{code}
 
 \subsection{Reduction}
-\label{anhang:hc:reduction}
+
+\begin{code}
+    \begin{minted}[breaklines,breakafter=\,,escapeinside=||,fontsize=\small]{c++}
+void block_reduce(hc::tiled_index<1> idx,
+    hc::array_view<int, 1> data, hc::array_view<int, 1> result,
+    std::size_t size, int blocks, int block_size) [[hc]]
+{
+    tile_static int scratch[1024];
+
+    auto i = static_cast<unsigned>(idx.tile[0] * block_size
+                                   + idx.local[0]);
+    if(i >= size) return;
+
+    auto tsum = data[i];
+
+    auto grid_size = blocks * block_size;
+    i += grid_size;
+
+    while((i + 3 * grid_size) < size) {
+        tsum += data[i] + data[i + grid_size] +
+                data[i + 2 * grid_size] + data[i + 3 * grid_size];
+        i += 4 * grid_size;
+    }
+    while(i < size) { // Noch fehlende Elemente
+        tsum += data[i];
+        i += grid_size;
+    }
+
+    scratch[idx.local[0]] = tsum;
+    idx.barrier.wait_with_tile_static_memory_fence();
+
+    #pragma unroll
+    for(auto bs = block_size, bsup = (block_size + 1) / 2;
+             bs > 1; bs /= 2, bsup = (bs + 1) / 2) {
+        auto cond = idx.local[0] < bsup &&
+            (idx.local[0] + bsup) < block_size &&
+            (idx.tile[0] * block_size + idx.local[0] + bsup) < size;
+
+        if(cond)
+            scratch[idx.local[0]] += scratch[idx.local[0] + bsup];
+        idx.barrier.wait_with_tile_static_memory_fence();
+    }
+
+    if(idx.local[0] == 0) result[idx.tile[0]] = scratch[0];
+}
+    \end{minted}
+    \caption{Reduction - HC-Implementierung}
+    \label{anhang:hc:reduction}
+\end{code}
 
 \subsection{N-Body}
 
