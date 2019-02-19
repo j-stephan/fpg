@@ -35,7 +35,55 @@ __global__ void write(float4* __restrict__ B, std::size_t num_elems)
 \end{code}
 
 \subsection{Reduction}
-\label{anhang:cuda:reduction}
+
+\begin{code}
+    \begin{minted}[breaklines,breakafter=\,,escapeinside=||,fontsize=\small]{cuda}
+__global__ void block_reduce(const int* __restrict__ data,
+                                   int* __restrict__ result,
+                                   std::size_t size)
+{
+    __shared__ int scratch[1024]; 
+
+    auto i = blockIdx.x * blockDim.x + threadIdx.x;
+    if(i >= size) return;
+
+    auto tsum = data[i];
+
+    auto grid_size = gridDim.x * blockDim.x;
+    i += grid_size;
+
+    while((i + 3 * grid_size) < size) {
+        tsum += data[i] + data[i + grid_size] +
+                data[i + 2 * grid_size] + data[i + 3 * grid_size];
+            i += 4 * grid_size;
+    }
+    while(i < size) { // noch fehlende Elemente
+        tsum += data[i];
+        i += grid_size;
+    }
+
+    scratch[threadIdx.x] = tsum;
+    __syncthreads();
+
+    #pragma unroll
+    for(auto bs = blockDim.x, bsup = (blockDim.x + 1) / 2;
+             bs > 1; bs /= 2, bsup = (bs + 1) / 2) {
+        auto cond = threadIdx.x < bsup &&
+            (threadIdx.x + bsup) < blockDim.x &&
+            (blockIdx.x * blockDim.x + threadIdx.x + bsup)
+            < size;
+
+        if(cond)
+            scratch[threadIdx.x] += scratch[threadIdx.x + bsup];
+        __syncthreads();
+    }
+
+    if(threadIdx.x == 0) result[blockIdx.x] = scratch[0];
+}
+    \end{minted}
+    \caption{Reduce -- CUDA-Implementierung}
+    \label{anhang:cuda:reduction}
+\end{code}
 
 \subsection{N-Body}
 
@@ -1081,9 +1129,172 @@ struct writer
 \end{figure}
 
 \subsection{HIP-Reduction (AMD)}
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {Reduction -- Vega 64 -- HIP},
+            xlabel = {Blöcke pro Multiprozessor},
+            ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
+            xmode = log,
+            log basis x = 2,
+            xmin = 2, xmax = 1024,
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = south east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            width = 0.75\textwidth,
+            scale only axis,
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = tiles, y = dim64,
+                            col sep = semicolon]
+                           {data/reduce-amd-hip-vega64.csv};
+            \addlegendentry{Tile-Größe = 64} 
+
+            \addplot table [x = tiles, y = dim128,
+                            col sep = semicolon]
+                           {data/reduce-amd-hip-vega64.csv};
+            \addlegendentry{Tile-Größe = 128} 
+
+            \addplot table [x = tiles, y = dim256,
+                            col sep = semicolon]
+                           {data/reduce-amd-hip-vega64.csv};
+            \addlegendentry{Tile-Größe = 256} 
+
+            \addplot table [x = tiles, y = dim512,
+                            col sep = semicolon]
+                           {data/reduce-amd-hip-vega64.csv};
+            \addlegendentry{Tile-Größe = 512} 
+
+            \addplot table [x = tiles, y = dim1024,
+                            col sep = semicolon]
+                           {data/reduce-amd-hip-vega64.csv};
+            \addlegendentry{Tile-Größe = 1024} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{Reduction-Bandbreite der Vega 64 (HIP)}
+    \label{anhang:amd:reduction:hip}
+\end{figure}
+
 \subsection{HIP-Reduction (NVIDIA)}
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {Reduction -- K20x -- HIP},
+            xlabel = {Blöcke pro Multiprozessor},
+            ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
+            xmode = log,
+            log basis x = 2,
+            xmin = 2, xmax = 1024,
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = south east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            width = 0.75\textwidth,
+            scale only axis,
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = blocks, y = dim64,
+                            col sep = semicolon]
+                           {data/reduce-nvidia-hip-k20x.csv};
+            \addlegendentry{Tile-Größe = 64} 
+
+            \addplot table [x = blocks, y = dim128,
+                            col sep = semicolon]
+                           {data/reduce-nvidia-hip-k20x.csv};
+            \addlegendentry{Tile-Größe = 128} 
+
+            \addplot table [x = blocks, y = dim256,
+                            col sep = semicolon]
+                           {data/reduce-nvidia-hip-k20x.csv};
+            \addlegendentry{Tile-Größe = 256} 
+
+            \addplot table [x = blocks, y = dim512,
+                            col sep = semicolon]
+                           {data/reduce-nvidia-hip-k20x.csv};
+            \addlegendentry{Tile-Größe = 512} 
+
+            \addplot table [x = blocks, y = dim1024,
+                            col sep = semicolon]
+                           {data/reduce-nvidia-hip-k20x.csv};
+            \addlegendentry{Tile-Größe = 1024} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{Reduction-Bandbreite K20x (HIP)}
+    \label{anhang:nvidia:reduction:hip}
+\end{figure}
+
 \subsection{SYCL-Reduction}
 
-\subsection{HIP-N-Body (AMD)}
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {Reduction -- K20x -- SYCL},
+            xlabel = {Gruppen pro Multiprozessor},
+            ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
+            xmode = log,
+            log basis x = 2,
+            xmin = 2, xmax = 4096,
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = south east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            width = 0.75\textwidth,
+            scale only axis,
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = blocks, y = dim64,
+                            col sep = semicolon]
+                           {data/reduce-nvidia-sycl-k20x.csv};
+            \addlegendentry{Tile-Größe = 64} 
+
+            \addplot table [x = blocks, y = dim128,
+                            col sep = semicolon]
+                           {data/reduce-nvidia-sycl-k20x.csv};
+            \addlegendentry{Tile-Größe = 128} 
+
+            \addplot table [x = blocks, y = dim256,
+                            col sep = semicolon]
+                           {data/reduce-nvidia-sycl-k20x.csv};
+            \addlegendentry{Tile-Größe = 256} 
+
+            \addplot table [x = blocks, y = dim512,
+                            col sep = semicolon]
+                           {data/reduce-nvidia-sycl-k20x.csv};
+            \addlegendentry{Tile-Größe = 512} 
+
+            \addplot table [x = blocks, y = dim1024,
+                            col sep = semicolon]
+                           {data/reduce-nvidia-sycl-k20x.csv};
+            \addlegendentry{Tile-Größe = 1024} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{Reduction-Bandbreite K20x (SYCL)}
+    \label{anhang:nvidia:reduction:sycl}
+\end{figure}
+
 \subsection{HIP-N-Body (NVIDIA)}
 \subsection{SYCL-N-Body}

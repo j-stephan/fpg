@@ -3,15 +3,9 @@
 
 \subsection{Verwendete Hard- und Software}
 
-Die hier gezeigten Benchmark-Ergebnisse wurden auf verschiedenen Knoten des
-\gls{hpc}-Systems Taurus gemessen:
-
-\begin{itemize}
-    \item Ein Knoten der \texttt{gpu2}-Partition mit zwei GPUs des Modells Tesla
-          K20x (mit aktiviertem ECC).
-    \item Einem experimentellen Knoten mit je einer GPU der Modelle Tesla P100
-          und Tesla V100
-\end{itemize}
+Die hier gezeigten Benchmark-Ergebnisse wurden auf einem Knoten der
+\texttt{gpu2}-Partition des \gls{hpc}-Systems Taurus gemessen, der über zwei
+GPUs des Modells Tesla K20x (mit aktiviertem ECC) verfügt.
 
 Die Messungen fanden innerhalb der SCS5-Umgebung statt, in der die folgende
 Software verwendet wurde:
@@ -81,6 +75,24 @@ Bandbreite $B$ (in \si{\gibi\byte\per\second}) genommen:
 
 wobei der Faktor $k$ die Werte $2 \cdot 10^{-9}$ (kombinierter Lese- und
 Schreibzugriff) oder $1 \cdot 10^{-9}$ (Schreibzugriff) annehmen kann.
+
+Der Quelltext~\ref{nvidia:zcopy:befehle} zeigt die verwendeten Compiler-Flags.
+
+
+\begin{code}
+    \begin{minted}[fontsize=\small]{bash}
+# CUDA-Compiler
+nvcc -std=c++14 -O3 -gencode arch=compute_35,code=sm_35
+
+# HIP-Compiler
+hipcc -O3 -std=c++14 -gencode arch=compute_35,code=sm_35
+
+# SYCL-Compiler
+compute++ -std=c++17 -O3
+    \end{minted}
+    \caption{Compiler-Flags für zcopy}
+    \label{nvidia:zcopy:befehle}
+\end{code}
 
 \subsubsection{Ergebnisse}
 
@@ -488,6 +500,155 @@ den Reduction-Benchmark wird daher eine tatsächlich erreichbare Obergrenze von
 \end{figure}
 
 \subsection{Reduction}
+
+\subsubsection{Implementierung}
+
+Die Implementierungen des Reduktionskernels sind dieser Arbeit angehängt und
+befinden sich in den Quelltexten~\ref{anhang:cuda:reduction} (CUDA),
+\ref{anhang:hip:reduction} (\gls{hip}) und \ref{anhang:sycl:reduction} (SYCL).
+
+\subsubsection{Messmethoden}
+\label{nvidia:reduction:methoden}
+
+Zunächst wurde die zu reduzierende Array-Größe auf die größte in den
+GPU-Speicher passende Elementezahl festgesetzt. Durch das Ausprobieren mehrerer
+Block-Größen zwischen \num{64} und \num{1024} einerseits und der Variation der
+Block-Zahl pro Multiprozessor andererseits wurde dann eine optimierte
+Kernel-Konfiguration ermittelt.
+
+Im nächsten Schritt wurde die ermittelte optimierte Konfiguration auf Arrays
+verschiedener Größe ausprobiert, um das Skalierungsverhalten festzustellen.
+
+Jede für den beschriebenen Ablauf nötige Kernel-Ausführung erfolgte zehn Mal
+hintereinander. Für jede Ausführung wurde über die den Spracherweiterungen
+zugehörigen Events die Laufzeit ermittelt; die minimale Laufzeit diente als
+Grundlage für die Berechnung der Bandbreite.
+
+Die Compiler-Flags sind dieselben wie die für den zcopy-Benchmark in
+Abschnitt~\ref{nvidia:zcopy:methoden} aufgeführten.
+
+\subsubsection{Ergebnisse}
+
+Der Blick auf die Abbildung~\ref{nvidia:reduction:cuda} zeigt, dass \num{256},
+\num{512} und \num{1024} Threads die besten Block-Größen bilden. Die selben
+Ergebnisse zeigen sich für \gls{hip} (siehe
+Abbildung~\ref{anhang:nvidia:reduction:hip}) und SYCL (siehe
+Abbildung~\ref{anhang:nvidia:reduction:sycl}). Die SYCL-Variante zeigt zudem ein
+effizienteres Verhalten für Blöcke mit \num{128} Threads.  Da \num{256} Threads
+über alle Spracherweiterungen hinweg die  größte Auswahl an guten
+Block-pro-Multiprozessor-Konfigurationen bieten, wurde im weiteren
+Benchmark-Verlauf diese Größe ausgewählt. Zwischen \num{8} und \num{1024}
+Blöcken pro Multiprozessor kommen für diese Größe verschiedene Konfigurationen
+in Frage, die sich für große Arrays nahezu gleichwertig verhalten. Da die
+nächste Benchmark-Stufe auch weitaus kleinere Arrays umfasst, wurde hier die
+kleinste sinnvolle Konfiguration gewählt: \num{8} Blöcke pro Multiprozessor. 
+
+Die zcopy-Ergebnisse können hier bestätigt werden: zwischen den Erweiterungen
+bestehen allenfalls marginale Bandbreitenunterschiede. Zudem kann die
+tatsächlich erreichbare Bandbreite, die im zcopy-Benchmark ermittelt wurde,
+auch bei der Reduktion nahezu erreicht werden (siehe
+Abbildung~\ref{nvidia:reduction:peak}).
+
+\begin{figure}
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {Reduction -- K20x -- CUDA},
+            xlabel = {Blöcke pro Multiprozessor},
+            ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
+            xmode = log,
+            log basis x = 2,
+            xmin = 2, xmax = 4096,
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = south east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            width = 0.75\textwidth,
+            scale only axis,
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = blocks, y = dim64,
+                            col sep = semicolon]
+                           {data/reduce-nvidia-cuda-k20x.csv};
+            \addlegendentry{Blockgröße = 64} 
+
+            \addplot table [x = blocks, y = dim128,
+                            col sep = semicolon]
+                           {data/reduce-nvidia-cuda-k20x.csv};
+            \addlegendentry{Blockgröße = 128} 
+
+            \addplot table [x = blocks, y = dim256,
+                            col sep = semicolon]
+                           {data/reduce-nvidia-cuda-k20x.csv};
+            \addlegendentry{Blockgröße = 256} 
+
+            \addplot table [x = blocks, y = dim512,
+                            col sep = semicolon]
+                           {data/reduce-nvidia-cuda-k20x.csv};
+            \addlegendentry{Blockgröße = 512} 
+
+            \addplot table [x = blocks, y = dim1024,
+                            col sep = semicolon]
+                           {data/reduce-nvidia-cuda-k20x.csv};
+            \addlegendentry{Blockgröße = 1024} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{Reduction-Bandbreite K20x (CUDA)}
+    \label{nvidia:reduction:cuda}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {Reduction -- K20x},
+            xlabel = {$n$},
+            ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
+            xmode = log,
+            log basis x = 2,
+            xmin = 65536, xmax = 134217728,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = south east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            width = 0.75\textwidth,
+            scale only axis,
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = n, y = CUDA,
+                            col sep = semicolon]
+                           {data/reduce-nvidia-k20x.csv};
+            \addlegendentry{HC} 
+
+            \addplot table [x = n, y = HIP,
+                            col sep = semicolon]
+                           {data/reduce-nvidia-k20x.csv};
+            \addlegendentry{HIP} 
+
+            \addplot table [x = n, y = SYCL,
+                            col sep = semicolon]
+                           {data/reduce-nvidia-k20x.csv};
+            \addlegendentry{SYCL} 
+
+            \addplot table [x = , y = Peak, col sep = semicolon]
+                           {data/reduce-nvidia-k20x.csv};
+            \addlegendentry{Peak}
+        \end{axis}
+    \end{tikzpicture}
+    \caption{Reduction-Bandbreite der K20x (acht 256er-Blöcke pro
+             Multiprozessor)}
+    \label{nvidia:reduction:peak}
+\end{figure}
 
 \subsection{N-Body}
 
