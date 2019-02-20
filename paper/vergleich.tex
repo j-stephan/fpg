@@ -193,6 +193,37 @@ C++-Quelltext an den auf dem System befindlichen entsprechenden Compiler
 weiter. Der Device-Quelltext wird in einem weiteren Schritt vom tatsächlichen
 Device-Compiler \texttt{cicc} in die Maschinensprache der Ziel-GPU übersetzt.
 
+Der Quelltext~\ref{vergleich:cuda:einfuehrung:vecadd} zeigt einen
+Beispiel-Kernel in CUDA. Das Schlüsselwort \texttt{\_\_global\_\_} markiert
+einen Kernel, der vom Compiler extrahiert und für das Device übersetzt wird. Das
+Schlüsselwort \texttt{\_\_device\_\_} markiert Funktionen, die innerhalb eines
+Kernels aufgerufen werden können, jedoch keine eigenständigen Kernel darstellen.
+Die letzte Zeile zeigt den Aufruf des Kernels aus dem Host-Code heraus. Die hier
+sichtbaren Konzepte der Blocks und Threads werden in den nächsten Abschnitten
+ausführlich erklärt.
+
+\begin{code}
+    \begin{minted}[breaklines,breakafter=\,,escapeinside=||,fontsize=\small]{cuda}
+__device__ int foo() { /* ... */ }
+
+__global__ void vec_add(const float* a, const float* b, float* c,
+                        std::size_t dim)
+{
+    auto i = blockIdx.x * blockDim.x + threadIdx.x;
+    if(i < dim)
+        return;
+
+    auto k = foo();
+    c[i] = a[i] + b[i] + k;
+}
+
+vec_add<<<block_num, thread_num>>>(dev_a, dev_b, dev_c, dim);
+    \end{minted}
+    \caption{Beispielkernel in CUDA}
+    \label{vergleich:cuda:einfuehrung:vecadd}
+\end{code}
+
+
 \subsubsection{Ausführungsmodell}
 
 Ein \textit{thread} ist die kleinste selbstständige Einheit, die eine Aufgabe
@@ -546,6 +577,32 @@ folgenden Abschnitten aufgeführt.
 \gls{gpgpu}-\gls{api}, \gls{hc}, das in Abschnitt~\ref{vergleich:hc} vorgestellt
 wird.
 
+Der Quelltext~\ref{vergleich:hip:einfuehrung:vecadd} zeigt einen in HIP
+geschriebenen Beispielkernel und den zugehörigen Aufruf innerhalb des
+Host-Codes. Die Block- und Threadkonzepte entsprechen den in CUDA vorhandenen.
+
+\begin{code}
+    \begin{minted}[breaklines,breakafter=\,,escapeinside=||,fontsize=\small]{cuda}
+__device__ int foo() { /* ... */ }
+
+__global__ void vec_add(const float* a, const float* b, float* c,
+                        std::size_t dim)
+{
+    auto i = |\textcolor{keyword-green}{hipBlockIdx\_x}| * |\textcolor{keyword-green}{hipBlockDim\_x}| + |\textcolor{keyword-green}{hipThreadIdx\_x}|;
+    if(i < dim)
+        return;
+
+    auto k = foo();
+    c[i] = a[i] + b[i] + k;
+}
+
+hipLaunchKernelGGL(vec_add, block_num, thread_num, 0, 0,
+                   dev_a, dev_b, dev_c, dim);
+    \end{minted}
+    \caption{Beispielkernel in HIP}
+    \label{vergleich:hip:einfuehrung:vecadd}
+\end{code}
+
 \subsubsection{Datensicht}
 
 \paragraph{Datenbewegung}
@@ -601,6 +658,40 @@ GitHub-Seite zur Verfügung stellt (vgl.~\cite{hcref}), der C++AMP-Spezifikation
 dem Jahr 2012\footnote{Die Features der Ende 2013 veröffentlichten Spezifikation
 für C++AMP 1.2 werden von HC nicht unterstützt.} (vgl.~\cite{cppamp2012}) und
 eigenen Experimenten.
+
+Der Quelltext~\ref{vergleich:hc:einfuehrung:vecadd} zeigt einen in HC
+geschriebenen Beispielkernel. Device-Funktionen und Kernel werden beide
+mit dem Attribut \texttt{[[hc]]} markiert. Die letzten Zeilen zeigen den Aufruf
+des Kernels innerhalb des Host-Codes. Auch hier werden die Konzepte in den
+nächsten Abschnitten detailliert erklärt.
+
+\begin{code}
+    \begin{minted}[breaklines,breakafter=\,,escapeinside=||,fontsize=\small]{c++}
+int foo() [[hc]] { /* ... */ }
+
+void vec_add [[hc]] (hc::tiled_index<1> idx,
+                     hc::array_view<const float> a,
+                     hc::array_view<const float> b,
+                     hc::array_view<float> c, std::size_t dim)
+{
+    auto i = idx.global[0];
+    if(i < dim)
+        return;
+
+    auto k = foo();
+    c[i] = a[i] + b[i] + k;
+}
+
+auto global_extent = hc::extent<1>{global_thread_num};
+hc::parallel_for_each(global_extent.tile(tile_size),
+[=](hc::tiled_index<1> idx)
+{
+    vec_add(idx, a_view, b_view, c_view, dim);
+});
+    \end{minted}
+    \caption{Beispielkernel in HC}
+    \label{vergleich:hc:einfuehrung:vecadd}
+\end{code}
 
 \subsubsection{Ausführungsmodell}
 
@@ -949,6 +1040,61 @@ Implementierung lautet \textit{SYCL Compiler and Runtimes}.} Implementierung
 kann mit \gls{opencl}-2.1-Implementierungen zusammenarbeiten, die derzeit nur
 für manche Intel-CPUs und -GPUs vorhanden sind.
 (vgl.~\cite{intelsycl})
+
+Der Quelltext~\ref{vergleich:sycl:einfuehrung:vecadd} zeigt das
+Vektoradditions-Beispiel in SYCL. Auffällig ist, dass Device-Funktionen und
+Kernel im Gegensatz zu den anderen Spracherweiterungen keine speziellen
+Annotationen benötigen. Die nächsten Abschnitte erläutern die verwendeten
+Konzepte genauer.
+
+\begin{code}
+    \begin{minted}[breaklines,breakafter=\,,escapeinside=||,fontsize=\small]{c++}
+int foo() { /* ... */ }
+
+struct vec_adder
+{
+    cl::sycl::accessor<float, 1,
+                       cl::sycl::access::mode::read,
+                       cl::sycl::access::target::global_buffer> a;
+    cl::sycl::accessor<float, 1,
+                       cl::sycl::access::mode::read,
+                       cl::sycl::access::target::global_buffer> b;
+    cl::sycl::accessor<float, 1,
+                       cl::sycl::access::mode::discard_write,
+                       cl::sycl::access::target::global_buffer> c;
+    std::size_t dim;
+
+    void operator()(cl::sycl::nd_item<1> my_item)
+    {
+        auto i = my_item.get_global_id(0);
+        if(i >= dim)
+            return;
+
+        auto k = foo();
+        c[i] = a[i] + b[i] + k;
+    }
+};
+
+queue.submit(cl::sycl::handler& cgh)
+{
+    auto acc_a = buf_a.get_access<cl::sycl::access::mode::read,
+                                  cl::sycl::target::global_buffer>();
+    auto acc_b = buf_b.get_access<cl::sycl::access::mode::read,
+                                  cl::sycl::target::global_buffer>();
+    auto acc_c = buf_c.get_access<cl::sycl::access::mode::discard_write,
+                                  cl::sycl::target::global_buffer>();
+
+    auto adder = vec_adder { acc_a, acc_b, acc_c, dim };
+
+    cgh.parallel_for(cl::sycl::nd_range<1>{
+                        cl::sycl::range<1>{global_thread_num},
+                        cl::sycl::range<1>{group_size}},
+                     adder);
+}
+    \end{minted}
+    \caption{Beispielkernel in SYCL}
+    \label{vergleich:sycl:einfuehrung:vecadd}
+\end{code}
 
 \subsubsection{Ausführungsmodell}
 

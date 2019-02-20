@@ -7,7 +7,7 @@
 Es wurde gezeigt, dass die Spracherweiterungen sich in ihrer Mächtigkeit recht
 ähnlich und auf derselben Hardware nicht signifikant besser oder schlechter
 als die Alternativen sind. Auch plattformübergreifend fallen die Unterschiede
-bei den prozentual erreichbaren FLOPS (siehe Abbildung~\ref{fazit:flops})
+bei den prozentual erreichbaren \gls{flops} (siehe Abbildung~\ref{fazit:flops})
 und Bandbreiten (siehe Abbildung~\ref{fazit:bandbreite}) gering aus, lediglich
 \gls{hip} auf der Vega 64 erreicht hier signifikant bessere Werte.
 
@@ -138,8 +138,8 @@ Multi-GPU-Programmierung verdient mehr Beachtung. Der SYCL-Standard kennt z.B.
 das Konzept von Peer-to-Peer-Kopien zwischen direkt verbundenen GPUs nicht. Hier
 wäre zu prüfen, inwieweit die vorhandenen Implementierungen von dieser Fähigkeit
 Gebrauch machen (können). Auch der direkte Zugriff auf den globalen Speicher
-benachbarter GPUs, wie er im CUDA-Umfeld über
-\textit{remote direct memory access} (RDMA) möglich ist, ist in den anderen
+von auf anderen Rechnern bzw.\ Knoten befindlicher GPUs, wie er im CUDA-Umfeld
+über \textit{remote direct memory access} (RDMA) möglich ist, ist in den anderen
 Spracherweiterungen möglicherweise gar nicht vorhanden oder hinter abstrakten
 Konzepten versteckt.
 
@@ -160,10 +160,3 @@ seiner Urheberrechte in der durch Google für die Android-Plattform erstellten
 Kopie des Java-\gls{api}. Da \gls{hip} ebenfalls eine Kopie eines anderen
 \gls{api} ist, wird das Urteil auch auf diesen Fall anwendbar sein.
 (vgl.~\cite{golem2019})
-
-\subsection{Notizen}
-
-Die vollständigen Quelltexte der Benchmarks sowie die \LaTeX-Quelltexte dieser
-Arbeit sind öffentlich unter dem folgenden Link erreichbar:
-
-\url{https://github.com/j-stephan/fpg}

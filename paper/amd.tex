@@ -111,7 +111,7 @@ angehängt.
     \centering
     \begin{tikzpicture}
         \begin{axis}[
-            title = {zcopy -- Lesen + Schreiben -- Vega 64},
+            title = {Vega 64 -- zcopy -- Lesen + Schreiben -- HC},
             xlabel = {Tiles pro Multiprozessor},
             ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
             xmode = log,
@@ -157,7 +157,7 @@ angehängt.
             \addlegendentry{$\text{Tile-Größe} = 1024$} 
         \end{axis}
     \end{tikzpicture}
-    \caption{Bandbreite der Vega 64 (Lesen und Schreiben, HC)}
+    \caption{zcopy: Bandbreite der Vega 64 (Lesen und Schreiben, HC)}
     \label{amd:zcopy:rw}
 \end{figure}
 
@@ -165,7 +165,7 @@ angehängt.
     \centering
     \begin{tikzpicture}
         \begin{axis}[
-            title = {zcopy -- Schreiben -- Vega 64},
+            title = {Vega 64 -- zcopy -- Schreiben -- HC},
             xlabel = {Tiles pro Multiprozessor},
             ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
             xmode = log,
@@ -211,7 +211,7 @@ angehängt.
             \addlegendentry{$\text{Tile-Größe} = 1024$} 
         \end{axis}
     \end{tikzpicture}
-    \caption{Bandbreite der Vega 64 (Schreiben, HC)}
+    \caption{zcopy: Bandbreite der Vega 64 (Schreiben, HC)}
     \label{amd:zcopy:w}
 \end{figure}
 
@@ -225,7 +225,7 @@ Schreibvorgang der Fall, wie die Abbildungen~\ref{amd:zcopy:vergleichrw} und
     \centering
     \begin{tikzpicture}
         \begin{axis}[
-            title = {zcopy -- Lesen+Schreiben -- Vega 64},
+            title = {Vega 64 -- zcopy -- Lesen + Schreiben},
             xlabel = {Tiles pro Multiprozessor},
             ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
             xmode = log,
@@ -256,7 +256,7 @@ Schreibvorgang der Fall, wie die Abbildungen~\ref{amd:zcopy:vergleichrw} und
             \addlegendentry{HIP} 
         \end{axis}
     \end{tikzpicture}
-    \caption{Bandbreite der Vega 64 (256er-Blöcke, Lesen+Schreiben)}
+    \caption{zcopy: Bandbreite der Vega 64 (256er-Blöcke, Lesen+Schreiben)}
     \label{amd:zcopy:vergleichrw}
 \end{figure}
 
@@ -264,7 +264,7 @@ Schreibvorgang der Fall, wie die Abbildungen~\ref{amd:zcopy:vergleichrw} und
     \centering
     \begin{tikzpicture}
         \begin{axis}[
-            title = {zcopy -- Schreiben -- Vega 64},
+            title = {Vega 64 -- zcopy -- Schreiben},
             xlabel = {Tiles pro Multiprozessor},
             ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
             xmode = log,
@@ -295,7 +295,7 @@ Schreibvorgang der Fall, wie die Abbildungen~\ref{amd:zcopy:vergleichrw} und
             \addlegendentry{HIP} 
         \end{axis}
     \end{tikzpicture}
-    \caption{Bandbreite der Vega 64 (256er-Blöcke, Schreiben)}
+    \caption{zcopy: Bandbreite der Vega 64 (256er-Blöcke, Schreiben)}
     \label{amd:zcopy:vergleichw}
 \end{figure}
 
@@ -306,7 +306,7 @@ theoretisch möglichen Bandbreite auch praktisch nutzen.
     \centering
     \begin{tikzpicture}
         \begin{axis}[
-            title = {zcopy -- Vega 64},
+            title = {Vega 64 -- zcopy -- HC},
             xlabel = {Tiles pro Multiprozessor},
             ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
             xmode = log,
@@ -344,7 +344,7 @@ theoretisch möglichen Bandbreite auch praktisch nutzen.
             \addlegendentry{Peak}
         \end{axis}
     \end{tikzpicture}
-    \caption{Theoretische und praktische Bandbreite der Vega 64 (HC,
+    \caption{zcopy: Theoretische und praktische Bandbreite der Vega 64 (HC,
              256er-Tiles)}
     \label{amd:zcopy:peak}
 \end{figure}
@@ -382,7 +382,7 @@ tatsächlich erreichbare Bandbreite heran, die im zcopy-Benchmark ermittelt wurd
     \centering
     \begin{tikzpicture}
         \begin{axis}[
-            title = {Reduction -- Vega 64 -- HC},
+            title = {Vega 64 -- Reduction -- HC},
             xlabel = {Tiles pro Multiprozessor},
             ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
             xmode = log,
@@ -428,7 +428,7 @@ tatsächlich erreichbare Bandbreite heran, die im zcopy-Benchmark ermittelt wurd
             \addlegendentry{Tile-Größe = 1024} 
         \end{axis}
     \end{tikzpicture}
-    \caption{Reduction-Bandbreite der Vega 64 (HC)}
+    \caption{Reduction: Bandbreite der Vega 64 (HC)}
     \label{amd:reduction:hc}
 \end{figure}
 
@@ -436,7 +436,7 @@ tatsächlich erreichbare Bandbreite heran, die im zcopy-Benchmark ermittelt wurd
     \centering
     \begin{tikzpicture}
         \begin{axis}[
-            title = {Reduction -- Vega 64},
+            title = {Vega 64 -- Reduction},
             xlabel = {$n$},
             ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
             xmode = log,
@@ -469,7 +469,7 @@ tatsächlich erreichbare Bandbreite heran, die im zcopy-Benchmark ermittelt wurd
             \addlegendentry{Peak}
         \end{axis}
     \end{tikzpicture}
-    \caption{Reduction-Bandbreite der Vega 64 (zwei 256er-Tiles pro
+    \caption{Reduction: Bandbreite der Vega 64 (zwei 256er-Tiles pro
              Multiprozessor)}
     \label{amd:reduction:peak}
 \end{figure}
@@ -478,39 +478,31 @@ tatsächlich erreichbare Bandbreite heran, die im zcopy-Benchmark ermittelt wurd
 
 \subsubsection{Implementierung}
 
-Die theoretische Funktion~\ref{methoden:nbody:gpu:bodybodyinteraction}, die die
-Interaktion zwischen zwei Körpern berechnet, wurde direkt in beiden Sprachen
-umgesetzt. Durch den Einsatz von \gls{fma}-Operationen werden die benötigten
-\gls{flops} für die Berechnung des Skalarprodukts sowie der Beschleunigung
-verringert. Die inverse Wurzel wird durch die \texttt{rsqrt}-Funktion berechnet.
-Die Quelltexte~\ref{anhang:hip:bodybodyinteraction} (HIP) und
-\ref{anhang:hc:bodybodyinteraction} (HC) im Anhang dieser Arbeit zeigen die
-konkrete Implementierung.
+Die Implementierung für \gls{hc} und \gls{hip} folgen denselben Prinzipien, die
+für die NVIDIA-Implementierungen in Abschnitt~\ref{nvidia:nbody:implementierung}
+aufgeführt wurden.
 
-Die theoretischen Funktionen~\ref{methoden:nbody:gpu:tilecalculation} und
-\ref{methoden:nbody:gpu:calcforces} wurden zusammengefasst, da erstere
-nur aus einer kurzen Schleife besteht. Überdies wurde der Compiler angewiesen,
-die Schleife auszurollen (siehe auch den nächsten Abschnitt). Diese
-Implementierungen finden sich in den angehängten
-Quelltexten~\ref{anhang:hip:forcecalculation} (HIP) bzw.
-\ref{anhang:hc:forcecalculation} (HC).
+\subsubsection{Messmethoden}
+
+Auch die Messmethoden entsprechen denen für NVIDIA-GPUs (siehe
+Abschnitt~\ref{nvidia:nbody:methoden}). Die Compiler-Flags und GPU-Einstellungen
+sind mit denen für den zcopy-Benchmark identisch (siehe
+Abschnitt~\ref{amd:zcopy:methoden}).
 
 \subsubsection{Optimierung und Auswertung}
 
-Eine einfache Optimierung ist das Ausrollen der Schleife, die nacheinander die
-Interaktionen berechnet. Dadurch erhöht sich der Registerbedarf pro Thread, der
-Overhead, der durch Verzweigungsinstruktionen anfällt, wird jedoch verringert.
-Dieser Effekt ist deutlich in den Abbildungen~\ref{amd:nbody:unroll-hc} und
-\ref{amd:nbody:unroll-hip} zu sehen:  durch die Bestimmung eines besseren
-Ausrollfaktors lassen sich in diesem Benchmark bei einer festen Kachelgröße von
-$p = 256$ knapp \num{1000} GFLOPS mehr Durchsatz gewinnen. Anhand dieser Messung
-wurde für den weiteren Verlauf der Messungen ein Ausrollfaktor von 8 festgelegt.
+Der durch das Ausrollen der Schleifen erzielte Effekt ist deutlich in den
+Abbildungen~\ref{amd:nbody:unroll-hc} und \ref{anhang:amd:nbody:unroll-hip} zu
+sehen: durch die Bestimmung eines besseren Ausrollfaktors lassen sich in diesem
+Benchmark bei einer festen Kachelgröße von $p = 256$ knapp \num{1000} GFLOPS
+mehr Durchsatz gewinnen. Anhand dieser Messung wurde für den weiteren Verlauf
+ein Ausrollfaktor von \num{8} festgelegt.
 
 \begin{figure}
     \centering
     \begin{tikzpicture}
         \begin{axis}[
-            title = {Ausrollen -- HC},
+            title = {Vega 64 -- N-Body -- Ausrollen -- HC},
             xlabel = {Ausrollfaktor},
             ylabel = {GFLOPS},
             xmode = log,
@@ -541,63 +533,25 @@ wurde für den weiteren Verlauf der Messungen ein Ausrollfaktor von 8 festgelegt
             \addlegendentry{$n = 8.192$} 
         \end{axis}
     \end{tikzpicture}
-    \caption{Performanzgewinn durch das Ausrollen der Schleife (HC)}
+    \caption{N-Body: Performanzgewinn durch das Ausrollen der Schleife (HC)}
     \label{amd:nbody:unroll-hc}
 \end{figure}
 
-\begin{figure}
-    \centering
-    \begin{tikzpicture}
-        \begin{axis}[
-            title = {Ausrollen -- HIP},
-            xlabel = {Ausrollfaktor},
-            ylabel = {GFLOPS},
-            xmode = log,
-            log basis x = 2,
-            xmin = 1, xmax = 512,
-            xtick = {1,2,4,8,16,32,64,128,256,512},
-            log ticks with fixed point,
-            ymajorgrids = true,
-            xmajorgrids = true,
-            grid style = dashed,
-            legend cell align = left,
-            legend pos = outer north east,
-            no markers,
-            every axis plot/.append style = {very thick},
-            cycle list name = exotic,
-            /pgf/number format/.cd, use comma
-        ]
-            \addplot table [x = count, y = gflops-hip, col sep = semicolon]
-                           {data/nbody-amd-unroll-524288.csv};
-            \addlegendentry{$n = 524.288$} 
-
-            \addplot table [x = count, y = gflops-hip, col sep = semicolon]
-                           {data/nbody-amd-unroll-65536.csv};
-            \addlegendentry{$n = 65.536$} 
-
-            \addplot table [x = count, y = gflops-hip, col sep = semicolon]
-                           {data/nbody-amd-unroll-8192.csv};
-            \addlegendentry{$n = 8.192$} 
-        \end{axis}
-    \end{tikzpicture}
-    \caption{Performanzgewinn durch das Ausrollen der Schleife (HIP)}
-    \label{amd:nbody:unroll-hip}
-\end{figure}
-
 Der nächste performanzrelevante Faktor ist die Größe der Kacheln selbst. Aus den
-in den Abbildungen~\ref{amd:nbody:tilesize-hc} und \ref{amd:nbody:tilesize-hip}
-dargestellten Messergebnissen wird ersichtlich, dass die Kachelgröße für den
-Benchmark weniger wichtig ist; relevante Unterschiede sind nur bei großen
-Kachelgrößen und wenigen Elementen sichtbar. Das ist ein wesentlicher
-Unterschied zu den in Abschnitt~\ref{nvidia:nbody:auswertung} für NVIDIA-GPUs
-gemessenen Ergebnissen, die von der Kachelgröße stark beeinflusst wurden. Für
-den weiteren Messverlauf wird daher eine Kachelgröße von $p = 256$ angenommen.
+in den Abbildungen~\ref{amd:nbody:tilesize-hc} und
+\ref{anhang:amd:nbody:tilesize-hip} dargestellten Messergebnissen wird
+ersichtlich, dass die Kachelgröße für den Benchmark weniger wichtig ist;
+relevante Unterschiede sind nur bei großen Kachelgrößen und wenigen Elementen
+sichtbar. Das ist ein wesentlicher Unterschied zu den in
+Abschnitt~\ref{nvidia:nbody:auswertung} für NVIDIA-GPUs gemessenen Ergebnissen,
+die von der Kachelgröße stark beeinflusst wurden. Für den weiteren Messverlauf
+wird daher eine Kachelgröße von $p = 256$ angenommen.
 
 \begin{figure}
     \centering
     \begin{tikzpicture}
         \begin{axis}[
-            title = {Kachelgrößen -- HC},
+            title = {Vega 64 -- N-Body -- Kachelgrößen -- HC},
             xlabel = {Kachelgröße},
             ylabel = {GFLOPS},
             xmode = log,
@@ -628,47 +582,8 @@ den weiteren Messverlauf wird daher eine Kachelgröße von $p = 256$ angenommen.
             \addlegendentry{$n = 8.192$} 
         \end{axis}
     \end{tikzpicture}
-    \caption{Performanz bei verschiedenen Kachelgrößen (HC)}
+    \caption{N-Body: Performanz bei verschiedenen Kachelgrößen (HC)}
     \label{amd:nbody:tilesize-hc}
-\end{figure}
-
-\begin{figure}
-    \centering
-    \begin{tikzpicture}
-        \begin{axis}[
-            title = {Kachelgrößen -- HIP},
-            xlabel = {Kachelgröße},
-            ylabel = {GFLOPS},
-            xmode = log,
-            log basis x = 2,
-            xtick = {64,128,256,512,1024},
-            xticklabel = {\xinttheiexpr2^\tick\relax},
-            log ticks with fixed point,
-            ymajorgrids = true,
-            xmajorgrids = true,
-            grid style = dashed,
-            legend cell align = left,
-            legend pos = outer north east,
-            no markers,
-            every axis plot/.append style = {very thick},
-            cycle list name = exotic,
-            /pgf/number format/.cd, use comma
-        ]
-            \addplot table [x = tilesize, y = gflops-hip, col sep = semicolon]
-                           {data/nbody-amd-tilesize-524288.csv};
-            \addlegendentry{$n = 524.288$} 
-
-            \addplot table [x = tilesize, y = gflops-hip, col sep = semicolon]
-                           {data/nbody-amd-tilesize-65536.csv};
-            \addlegendentry{$n = 65.536$} 
-
-            \addplot table [x = tilesize, y = gflops-hip, col sep = semicolon]
-                           {data/nbody-amd-tilesize-8192.csv};
-            \addlegendentry{$n = 8.192$} 
-        \end{axis}
-    \end{tikzpicture}
-    \caption{Performanz bei verschiedenen Kachelgrößen (HIP)}
-    \label{amd:nbody:tilesize-hip}
 \end{figure}
 
 Mit der experimentell ermittelten Konfiguration lässt sich ein direkter
@@ -683,7 +598,7 @@ identisches Ergebnis zu erzeugen (siehe Quelltexte~\ref{amd:nbody:isahc} und
     \centering
     \begin{tikzpicture}
         \begin{axis}[
-            title = {Leistungsvergleich -- HC und HIP},
+            title = {Vega 64 -- N-Body -- Leistungsvergleich -- HC und HIP},
             xlabel = {$n$},
             ylabel = {GFLOPS},
             xtick = data,
@@ -722,7 +637,7 @@ identisches Ergebnis zu erzeugen (siehe Quelltexte~\ref{amd:nbody:isahc} und
             \addlegendentry{Max.}
         \end{axis}
     \end{tikzpicture}
-    \caption{Leistungsvergleich zwischen HC und HIP}
+    \caption{N-Body: Leistungsvergleich zwischen HC und HIP}
     \label{amd:nbody:comparison}
 \end{figure}
 
@@ -754,7 +669,7 @@ v_fma_f32 v18, v14, v17, v11
 v_fma_f32 v15, v15, v17, v12
 v_fma_f32 v16, v16, v17, v13                   
         \end{minted}
-        \captionof{listing}{Maschinencode des HC-Kernels}
+        \captionof{listing}{N-Body: Maschinencode des HC-Kernels}
         \label{amd:nbody:isahc}
     \end{minipage}
     %
@@ -785,7 +700,7 @@ v_fma_f32 v18, v14, v17, v11
 v_fma_f32 v15, v15, v17, v12
 v_fma_f32 v16, v16, v17, v13
         \end{minted}
-        \captionof{listing}{Maschinencode des HIP-Kernels}
+        \captionof{listing}{N-Body: Maschinencode des HIP-Kernels}
         \label{amd:nbody:isahip}
     \end{minipage}
 \end{figure}

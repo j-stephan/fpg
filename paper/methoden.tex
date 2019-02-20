@@ -638,7 +638,7 @@ dient der Berechnung der Krafteinwirkung auf einen Körper $i$ durch die
 Interaktion mit dem Körper $j$ und aktualisiert die Beschleunigung $a_i$ des
 Körpers $i$. Die Beschreibungen der Körper enthalten die Koordinaten in den
 Feldern \texttt{x}, \texttt{y} und \texttt{z} sowie die Körpermasse im Feld
-\texttt{w}. Die Berechnung einer Interaktion benötigt 20 \gls{flops}.
+\texttt{w}. Die Berechnung einer Interaktion benötigt 20 \glspl{flop}.
 
 \begin{code}
     \begin{minted}[breaklines,breakafter=\,,escapeinside=||,fontsize=\small]{c++}
@@ -646,19 +646,19 @@ const float epsilon2 = epsilon * epsilon;
 
 float3 body_body_interaction(float4 i, float4 j, float3 ai)
 {
-    // 3 FLOPS
+    // 3 FLOPs
     float3 r = j.xyz - i.xyz;
 
-    // 6 FLOPS
+    // 6 FLOPs
     float dist_sqr = skalarprodukt(r, r) + epsilon2;
 
-    // 4 FLOPS (2x Multiplikation, Wurzel, Inversion 
+    // 4 FLOPs (2x Multiplikation, Wurzel, Inversion 
     float inv_dist_cube = 1.0 / sqrt(dist_sqr * dist_sqr * dist_sqr);
 
     // 1 FLOP
     float s = j.w * inv_dist_cube;
 
-    // 6 FLOPS -- ai und r sind Vektoren, s ist skalar
+    // 6 FLOPs -- ai und r sind Vektoren, s ist skalar
     ai += r * s;
 
     return ai;

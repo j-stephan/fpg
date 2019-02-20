@@ -7,6 +7,7 @@
 
 \newacronym{dsp}{DSP}{\textit{digital signal processor}}
 
+\newacronym{flops}{FLOPS}{\textit{floating-point operations per second}}
 \newacronym{fma}{FMA}{\textit{fused multiply-add}}
 \newacronym{fpga}{FPGA}{\textit{field programmable gate array}}
 
@@ -19,16 +20,10 @@
 \newacronym{hpc}{HPC}{\textit{high-performance computing}}
 \newacronym{hsa}{HSA}{\textit{Heterogeneous System Architecture}}
 
-\newacronym{numa}{NUMA}{\textit{non-uniform memory access}}
-
-\newacronym{openacc}{OpenACC}{\textit{Open Accelerators}}
 \newacronym{opencl}{OpenCL}{\textit{Open Compute Language}}
 \newacronym{openmp}{OpenMP}{\textit{Open Multi-Processing}}
 
-\newacronym{rock}{ROCk}{\textit{Radeon Open Compute Kernel driver}}
 \newacronym{rocm}{ROCm}{\textit{Radeon Open Compute Platform}}
-\newacronym{rocr}{ROCr}{\textit{Radeon Open Compute Platform Runtime}}
-\newacronym{roct}{ROCt}{\textit{Radeon Open Compute Thunk Interface}}
 
 \newacronym{simd}{SIMD}{\textit{single-instruction, multiple data}}
 \newacronym{simt}{SIMT}{\textit{single-instruction, multiple thread}}
@@ -45,8 +40,10 @@
                                        Superrechner.},
                         plural = Hosts}
 \newglossaryentry{device}{name = Device,
-                          description = {Gerät, das einen Kernel ausführt. Im
-                                         Kontext dieser Arbeit stets eine GPU.},
+                          description = {Ein von der CPU zu unterscheidendes
+                                         Gerät für Berechnungen (Beschleuniger).
+                                         Im Kontext dieser Arbeit stets eine
+                                         GPU.},
                           plural = Devices}
 \newglossaryentry{singlesource}{name = {single-source compilation},
                                 description = {Die Quelltexte für Host und
@@ -61,9 +58,7 @@
                                               Device-Quelltext erst zur Laufzeit
                                               des Programms von einem weiteren
                                               Compiler.}}
-\newglossaryentry{flops}{name = {FLOPS},
-                         description = {Fließkommaoperationen pro Sekunde
-                                        (engl. \textit{floating point operations
-                                        per second}). Steht häufig auch nur für
-                                        den Plural von FLOP.}
-}
+\newglossaryentry{flop}{name = {FLOP},
+                        description = {Fließkommaoperationen (engl.
+                                        \textit{floating point operations}).},
+                        plural = FLOPs}

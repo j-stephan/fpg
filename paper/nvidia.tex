@@ -114,7 +114,7 @@ Abbildung~\ref{nvidia:zcopy:k20xrwwo}).
     \centering
     \begin{tikzpicture}
         \begin{axis}[
-            title = {zcopy -- Lesen + Schreiben -- generisch -- K20x},
+            title = {K20x -- zcopy -- Lesen + Schreiben -- generisch},
             xlabel = {Blöcke pro Multiprozessor},
             ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
             xmode = log,
@@ -161,7 +161,7 @@ Abbildung~\ref{nvidia:zcopy:k20xrwwo}).
             \addlegendentry{$\text{Blockgröße} = 1024$} 
         \end{axis}
     \end{tikzpicture}
-    \caption{K20x-Bandbreite für generische Blöcke (Lesen und Schreiben, CUDA)}
+    \caption{zcopy: K20x-Bandbreite für generische Blöcke (Lesen und Schreiben, CUDA)}
     \label{nvidia:zcopy:k20xgenerischrw}
 \end{figure}
 
@@ -169,7 +169,7 @@ Abbildung~\ref{nvidia:zcopy:k20xrwwo}).
     \centering
     \begin{tikzpicture}
         \begin{axis}[
-            title = {zcopy -- Schreiben -- generisch -- K20x},
+            title = {K20x -- zcopy -- Schreiben -- generisch},
             xlabel = {Blöcke pro Multiprozessor},
             ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
             xmode = log,
@@ -216,7 +216,7 @@ Abbildung~\ref{nvidia:zcopy:k20xrwwo}).
             \addlegendentry{$\text{Blockgröße} = 1024$} 
         \end{axis}
     \end{tikzpicture}
-    \caption{K20x-Bandbreite für generische Blöcke (Schreiben, CUDA)}
+    \caption{zcopy: K20x-Bandbreite für generische Blöcke (Schreiben, CUDA)}
     \label{nvidia:zcopy:k20xgenerischw}
 \end{figure}
 
@@ -224,7 +224,7 @@ Abbildung~\ref{nvidia:zcopy:k20xrwwo}).
     \centering
     \begin{tikzpicture}
         \begin{axis}[
-            title = {zcopy -- Lesen + Schreiben -- optimiert -- K20x},
+            title = {K20x -- zcopy -- Lesen + Schreiben -- optimiert},
             xlabel = {Blöcke pro Multiprozessor},
             ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
             xmode = log,
@@ -262,7 +262,7 @@ Abbildung~\ref{nvidia:zcopy:k20xrwwo}).
 
         \end{axis}
     \end{tikzpicture}
-    \caption{K20x-Bandbreite für optimierte Blöcke (Lesen und Schreiben, CUDA)}
+    \caption{zcopy: K20x-Bandbreite für optimierte Blöcke (Lesen und Schreiben, CUDA)}
     \label{nvidia:zcopy:k20xangepasstrw}
 \end{figure}
 
@@ -270,7 +270,7 @@ Abbildung~\ref{nvidia:zcopy:k20xrwwo}).
     \centering
     \begin{tikzpicture}
         \begin{axis}[
-            title = {zcopy -- Schreiben -- optimiert -- K20x},
+            title = {K20x -- zcopy -- Schreiben -- optimiert},
             xlabel = {Blöcke pro Multiprozessor},
             ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
             xmode = log,
@@ -307,7 +307,7 @@ Abbildung~\ref{nvidia:zcopy:k20xrwwo}).
             \addlegendentry{$\text{Blockgröße} = 768$} 
         \end{axis}
     \end{tikzpicture}
-    \caption{K20x-Bandbreite für optimierte Blöcke (Schreiben, CUDA)}
+    \caption{zcopy: K20x-Bandbreite für optimierte Blöcke (Schreiben, CUDA)}
     \label{nvidia:zcopy:k20xangepasstw}
 \end{figure}
 
@@ -315,7 +315,7 @@ Abbildung~\ref{nvidia:zcopy:k20xrwwo}).
     \centering
     \begin{tikzpicture}
         \begin{axis}[
-            title = {zcopy -- Schreiben -- generisch und optimiert -- K20x},
+            title = {K20x -- zcopy -- Schreiben -- generisch und optimiert},
             xlabel = {Blöcke pro Multiprozessor},
             ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
             xmode = log,
@@ -347,8 +347,8 @@ Abbildung~\ref{nvidia:zcopy:k20xrwwo}).
             \addlegendentry{$\text{Blockgröße} = 1024$} 
         \end{axis}
     \end{tikzpicture}
-    \caption{K20x-Bandbreite für generische und optimierte Blöcke (Schreiben,
-             CUDA)}
+    \caption{zcopy: K20x-Bandbreite für generische und optimierte Blöcke
+             (Schreiben, CUDA)}
     \label{nvidia:zcopy:k20xvergleich}
 \end{figure}
 
@@ -356,7 +356,7 @@ Abbildung~\ref{nvidia:zcopy:k20xrwwo}).
     \centering
     \begin{tikzpicture}
         \begin{axis}[
-            title = {zcopy -- optimiert -- K20x},
+            title = {K20x -- zcopy -- optimiert},
             xlabel = {Blöcke pro Multiprozessor},
             ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
             xmode = log,
@@ -388,7 +388,7 @@ Abbildung~\ref{nvidia:zcopy:k20xrwwo}).
             \addlegendentry{Schreiben} 
         \end{axis}
     \end{tikzpicture}
-    \caption{K20x-Bandbreite für 768er-Blöcke (CUDA)}
+    \caption{zcopy: K20x-Bandbreite für 768er-Blöcke (CUDA)}
     \label{nvidia:zcopy:k20xrwwo}
 \end{figure}
 
@@ -405,7 +405,7 @@ Abbildung~\ref{nvidia:zcopy:k20xexts} zeigt.
     \centering
     \begin{tikzpicture}
         \begin{axis}[
-            title = {zcopy -- Schreiben -- optimiert -- K20x},
+            title = {K20x -- zcopy -- Schreiben -- optimiert},
             xlabel = {Blöcke pro Multiprozessor},
             ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
             xmode = log,
@@ -442,7 +442,7 @@ Abbildung~\ref{nvidia:zcopy:k20xexts} zeigt.
             \addlegendentry{SYCL} 
         \end{axis}
     \end{tikzpicture}
-    \caption{K20x-Bandbreite für 768er-Blöcke (Schreiben)}
+    \caption{zcopy: K20x-Bandbreite für 768er-Blöcke (Schreiben)}
     \label{nvidia:zcopy:k20xexts}
 \end{figure}
 
@@ -456,7 +456,7 @@ den Reduction-Benchmark wird daher eine tatsächlich erreichbare Obergrenze von
     \centering
     \begin{tikzpicture}
         \begin{axis}[
-            title = {zcopy -- optimiert -- K20x},
+            title = {K20x -- zcopy -- optimiert},
             xlabel = {Blöcke pro Multiprozessor},
             ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
             xmode = log,
@@ -494,7 +494,7 @@ den Reduction-Benchmark wird daher eine tatsächlich erreichbare Obergrenze von
             \addlegendentry{Peak}
         \end{axis}
     \end{tikzpicture}
-    \caption{Theoretische und praktische K20x-Bandbreite für 768er-Blöcke}
+    \caption{zcopy: Theoretische und praktische K20x-Bandbreite für 768er-Blöcke}
     \label{nvidia:zcopy:k20xmax}
 \end{figure}
 
@@ -552,7 +552,7 @@ Abbildung~\ref{nvidia:reduction:peak}).
     \centering
     \begin{tikzpicture}
         \begin{axis}[
-            title = {Reduction -- K20x -- CUDA},
+            title = {K20x -- Reduction -- CUDA},
             xlabel = {Blöcke pro Multiprozessor},
             ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
             xmode = log,
@@ -598,7 +598,7 @@ Abbildung~\ref{nvidia:reduction:peak}).
             \addlegendentry{Blockgröße = 1024} 
         \end{axis}
     \end{tikzpicture}
-    \caption{Reduction-Bandbreite K20x (CUDA)}
+    \caption{Reduction: Bandbreite der K20x (CUDA)}
     \label{nvidia:reduction:cuda}
 \end{figure}
 
@@ -606,7 +606,7 @@ Abbildung~\ref{nvidia:reduction:peak}).
     \centering
     \begin{tikzpicture}
         \begin{axis}[
-            title = {Reduction -- K20x},
+            title = {K20x -- Reduction},
             xlabel = {$n$},
             ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
             xmode = log,
@@ -644,7 +644,7 @@ Abbildung~\ref{nvidia:reduction:peak}).
             \addlegendentry{Peak}
         \end{axis}
     \end{tikzpicture}
-    \caption{Reduction-Bandbreite der K20x (acht 256er-Blöcke pro
+    \caption{Reduction: Bandbreite der K20x (acht 256er-Blöcke pro
              Multiprozessor)}
     \label{nvidia:reduction:peak}
 \end{figure}
@@ -652,11 +652,12 @@ Abbildung~\ref{nvidia:reduction:peak}).
 \subsection{N-Body}
 
 \subsubsection{Implementierung}
+\label{nvidia:nbody:implementierung}
 
 Die theoretische Funktion~\ref{methoden:nbody:gpu:bodybodyinteraction}, die die
 Interaktion zwischen zwei Körpern berechnet, wurde in allen Spracherweiterungen
 umgesetzt. Durch den Einsatz von \gls{fma}-Operationen werden die benötigten
-\gls{flops} für die Berechnung des Skalarprodukts sowie der Beschleunigung
+\glspl{flop} für die Berechnung des Skalarprodukts sowie der Beschleunigung
 verringert. Die inverse Wurzel wird durch die \texttt{rsqrt}-Funktion berechnet.
 Die Quelltexte~\ref{anhang:cuda:bodybodyinteraction} (CUDA),
 \ref{anhang:hip:bodybodyinteraction} und \ref{anhang:sycl:bodybodyinteraction}
@@ -700,13 +701,37 @@ auto Q_rsqrt(float number) -> float
     \label{nvidia:nbody:qrsqrt}
 \end{code}
 
+\subsubsection{Messmethoden}
+\label{nvidia:nbody:methoden}
+
+Der N-Body-Benchmark wurde für jede verwendete Block-Größe über 10 Zeitschritte
+($i$) ausgeführt. Anhand der dafür benötigten Laufzeit $t$ (in
+Sekunden) lassen sich die erreichten \gls{flops} nach dem folgenden Schema
+berechnen:
+
+\begin{align*}
+    I &= n \cdot n \cdot i\\
+    I_s &= \frac{I}{t}\\
+    \text{FLOPS} &= I_s \cdot 20,
+\end{align*}
+
+wobei $I$ die Zahl der Interaktionen darstellt und $I_s$ die Interaktionen pro
+Sekunde. Die Berechnung einer Interaktion benötigt 20 \glspl{flop}.
+
+Die Compiler-Flags sind mit denen des zcopy-Benchmarks identisch (siehe
+Abschnitt~\ref{nvidia:zcopy:methoden}).
+
 \subsubsection{Optimierung und Auswertung}
 \label{nvidia:nbody:auswertung}
 
 Eine einfache Optimierung ist das Ausrollen der Schleife, die nacheinander die
-Interaktionen berechnet. Dadurch erhöht sich der Registerbedarf pro Thread, der
-Overhead, der durch Verzweigungsinstruktionen anfällt, wird jedoch verringert.
-Dieser Effekt ist deutlich in der Abbildungen~\ref{nvidia:nbody:unroll:cuda} zu
+Interaktionen berechnet. Dadurch erhöht sich zwar der Registerbedarf pro Thread,
+der mögliche Grad an \textit{instruction-level parallelism} (ILP) wächst aber
+ebenfalls, da es nun weniger Instruktionen gibt, die von vorherigen
+Instruktionen abhängig sind. Zudem verringert sich der Overhead, der durch
+Verzweigungsinstruktionen anfällt.
+
+Diese Effekte sind deutlich in der Abbildung~\ref{nvidia:nbody:unroll:cuda} zu
 sehen:  durch die Bestimmung eines besseren Ausrollfaktors lassen sich in diesem
 Benchmark bei einer festen Kachelgröße von $p = 256$ knapp \num{600} GFLOPS mehr
 Durchsatz gewinnen. Dieses Verhalten kann auch bei der Implementierung mit
@@ -719,7 +744,7 @@ Compiler den Ausrollfaktor ignoriert oder nicht zu verarbeiten weiß.
     \centering
     \begin{tikzpicture}
         \begin{axis}[
-            title = {Ausrollen -- CUDA},
+            title = {K20x -- N-Body -- Ausrollen -- CUDA},
             xlabel = {Ausrollfaktor},
             ylabel = {GFLOPS},
             xmode = log,
@@ -751,7 +776,7 @@ Compiler den Ausrollfaktor ignoriert oder nicht zu verarbeiten weiß.
             \addlegendentry{$n = 8.192$} 
         \end{axis}
     \end{tikzpicture}
-    \caption{Performanzgewinn durch das Ausrollen der Schleife (CUDA)}
+    \caption{N-Body: Performanzgewinn durch das Ausrollen der Schleife (CUDA)}
     \label{nvidia:nbody:unroll:cuda}
 \end{figure}
 
@@ -759,7 +784,7 @@ Compiler den Ausrollfaktor ignoriert oder nicht zu verarbeiten weiß.
     \centering
     \begin{tikzpicture}
         \begin{axis}[
-            title = {Ausrollen -- SYCL},
+            title = {K20x -- N-Body -- Ausrollen -- SYCL},
             xlabel = {Ausrollfaktor},
             ylabel = {GFLOPS},
             xmode = log,
@@ -791,7 +816,7 @@ Compiler den Ausrollfaktor ignoriert oder nicht zu verarbeiten weiß.
             \addlegendentry{$n = 8.192$} 
         \end{axis}
     \end{tikzpicture}
-    \caption{Performanzgewinn durch das Ausrollen der Schleife (SYCL)}
+    \caption{N-Body: Performanzgewinn durch das Ausrollen der Schleife (SYCL)}
     \label{nvidia:nbody:unroll:sycl}
 \end{figure}
 
@@ -804,14 +829,22 @@ Möglicherweise verhindern das Ummanteln des CUDA-\gls{api} durch das
 \texttt{hipcc}-Skript einige kleinere Compiler-Optimierungen, die bei nativem
 CUDA-Code möglich wären.
 
-Anhand dieser Messung wurde für den weiteren Verlauf ein Ausrollfaktor von 64
-festgelegt.
+Interessant ist ebenfalls, dass ein relativ großer Ausrollfaktor von \num{128}
+bei \gls{hip} noch positive Auswirkungen auf die Performanz hat.
+Normalerweise wäre durch den hohen Registerverbrauch bereits hier eine
+schlechtere Leistung zu erwarten, da auf einem Multiprozessor weniger Blöcke
+gleichzeitig Platz finden. Hier wäre zu untersuchen, inwieweit die Register
+wiederverwendet werden und wie sich dies auf die Auslastung der Multiprozessoren
+auswirkt.
+
+Anhand dieser Messung wurde für den weiteren Verlauf ein Ausrollfaktor von
+\num{64} festgelegt.
 
 \begin{figure}
     \centering
     \begin{tikzpicture}
         \begin{axis}[
-            title = {Ausrollen -- CUDA und HIP},
+            title = {K20x -- N-Body -- Ausrollen -- CUDA und HIP},
             xlabel = {Ausrollfaktor},
             ylabel = {GFLOPS},
             xmode = log,
@@ -839,7 +872,7 @@ festgelegt.
             \addlegendentry{HIP} 
         \end{axis}
     \end{tikzpicture}
-    \caption{Vergleich der Ausrollfaktoren zwischen CUDA und HIP ($n = 524.288$)}
+    \caption{N-Body: Vergleich der Ausrollfaktoren zwischen CUDA und HIP ($n = 524.288$)}
     \label{nvidia:nbody:unroll:cudahip}
 \end{figure}
 
@@ -855,7 +888,7 @@ weiteren Messverlauf wird daher eine Kachelgröße von $p = 512$ angenommen.
     \centering
     \begin{tikzpicture}
         \begin{axis}[
-            title = {Kachelgrößen -- CUDA},
+            title = {K20x -- N-Body -- Kachelgrößen -- CUDA},
             xlabel = {Kachelgröße},
             ylabel = {GFLOPS},
             xmode = log,
@@ -886,7 +919,7 @@ weiteren Messverlauf wird daher eine Kachelgröße von $p = 512$ angenommen.
             \addlegendentry{$n = 8.192$} 
         \end{axis}
     \end{tikzpicture}
-    \caption{Performanz bei verschiedenen Kachelgrößen (CUDA)}
+    \caption{N-Body: Performanz bei verschiedenen Kachelgrößen (CUDA)}
     \label{nvidia:nbody:tilesize:cuda}
 \end{figure}
 
@@ -903,7 +936,7 @@ Quelltexte~\ref{nvidia:nbody:ptxnvcc} und \ref{nvidia:nbody:ptxhip}).
     \centering
     \begin{tikzpicture}
         \begin{axis}[
-            title = {Leistungsvergleich -- CUDA und HIP},
+            title = {K20x -- N-Body -- Leistungsvergleich -- CUDA und HIP},
             xlabel = {$n$},
             ylabel = {GFLOPS},
             xtick = data,
@@ -939,7 +972,7 @@ Quelltexte~\ref{nvidia:nbody:ptxnvcc} und \ref{nvidia:nbody:ptxhip}).
             \addlegendentry{HIP} 
         \end{axis}
     \end{tikzpicture}
-    \caption{Leistungsvergleich zwischen CUDA und HIP}
+    \caption{N-Body: Leistungsvergleich zwischen CUDA und HIP}
     \label{nvidia:nbody:comparisonhip}
 \end{figure}
 
@@ -966,7 +999,7 @@ fma.rn.f32 %f69, %f58, %f68, %f21590;
 fma.rn.f32 %f70, %f59, %f68, %f21589;
 fma.rn.f32 %f71, %f60, %f68, %f21588;
         \end{minted}
-        \captionof{listing}{Maschinencode des CUDA-Kernels}
+        \captionof{listing}{N-Body: Maschinencode des CUDA-Kernels}
         \label{nvidia:nbody:ptxnvcc}
     \end{minipage}
     %
@@ -992,7 +1025,7 @@ fma.rn.f32 %f69, %f58, %f68, %f21590;
 fma.rn.f32 %f70, %f59, %f68, %f21589;
 fma.rn.f32 %f71, %f60, %f68, %f21588;
         \end{minted}
-        \captionof{listing}{Maschinencode des HIP-Kernels}
+        \captionof{listing}{N-Body: Maschinencode des HIP-Kernels}
         \label{nvidia:nbody:ptxhip}
     \end{minipage}
 \end{figure}
@@ -1009,7 +1042,7 @@ Ergebnisse erklärt.
     \centering
     \begin{tikzpicture}
         \begin{axis}[
-            title = {Leistungsvergleich -- CUDA und SYCL},
+            title = {K20x -- N-Body -- Leistungsvergleich -- CUDA und SYCL},
             xlabel = {$n$},
             ylabel = {GFLOPS},
             xtick = data,
@@ -1045,7 +1078,7 @@ Ergebnisse erklärt.
             \addlegendentry{SYCL} 
         \end{axis}
     \end{tikzpicture}
-    \caption{Leistungsvergleich zwischen CUDA (mit Q\_rsqrt) und SYCL}
+    \caption{N-Body: Leistungsvergleich zwischen CUDA (mit Q\_rsqrt) und SYCL}
     \label{nvidia:nbody:comparisonsycl}
 \end{figure}
 
@@ -1080,7 +1113,7 @@ fma.rn.f32 %f75, %f58, %f74, %f13403;
 fma.rn.f32 %f76, %f59, %f74, %f13402;
 fma.rn.f32 %f77, %f60, %f74, %f13401;
         \end{minted}
-        \captionof{listing}{Maschinencode des CUDA-Kernels (mit Q\_rsqrt)}
+        \captionof{listing}{N-Body: Maschinencode des CUDA-Kernels (mit Q\_rsqrt)}
         \label{nvidia:nbody:ptxnvcc-qrsqrt}
     \end{minipage}
     %
@@ -1112,7 +1145,7 @@ fma.rn.f32 %f76, %f39, %f51, %f76;
 fma.rn.f32 %f75, %f38, %f51, %f75;
 fma.rn.f32 %f74, %f37, %f51, %f74;
         \end{minted}
-        \captionof{listing}{Maschinencode des SYCL-Kernels}
+        \captionof{listing}{N-Body: Maschinencode des SYCL-Kernels}
         \label{nvidia:nbody:ptxsycl}
     \end{minipage}
 \end{figure}
