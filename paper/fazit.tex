@@ -1,13 +1,165 @@
 \section{Fazit}
 \label{fazit}
 
+\subsection{Zusammenfassung und Empfehlungen}
+\label{fazit:zusammenfassung}
+
+Es wurde gezeigt, dass die Spracherweiterungen sich in ihrer Mächtigkeit recht
+ähnlich und auf derselben Hardware nicht signifikant besser oder schlechter
+als die Alternativen sind. Auch plattformübergreifend fallen die Unterschiede
+bei den prozentual erreichbaren FLOPS (siehe Abbildung~\ref{fazit:flops})
+und Bandbreiten (siehe Abbildung~\ref{fazit:bandbreite}) gering aus, lediglich
+\gls{hip} auf der Vega 64 erreicht hier signifikant bessere Werte.
+
+\begin{figure}
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {Leistungsvergleich -- FLOPS},
+            ylabel = {Prozent der Peak-Performance},
+            xtick = data,
+            symbolic x coords = {K20x,Vega 64},
+            x tick label style = {align=center},
+            enlarge x limits = 0.5,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = outer north east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma,
+            ybar,
+            %width = 0.75\textwidth,
+            scale only axis,
+            ymin = 0, ymax = 100,
+            ylabel near ticks,
+            xlabel near ticks
+        ]
+            \addplot table [x = acc, y = CUDA, col sep = semicolon]
+                           {data/flops.csv};
+            \addlegendentry{CUDA} 
+
+            \addplot table [x = acc, y = HIP, col sep = semicolon]
+                           {data/flops.csv};
+            \addlegendentry{HIP} 
+
+            \addplot table [x = acc, y = HC, col sep = semicolon]
+                           {data/flops.csv};
+            \addlegendentry{HC} 
+
+            \addplot table [x = acc, y = CUDAQ, col sep = semicolon]
+                           {data/flops.csv};
+            \addlegendentry{CUDA (Q\_rsqrt)} 
+
+            \addplot table [x = acc, y = SYCL, col sep = semicolon]
+                           {data/flops.csv};
+            \addlegendentry{SYCL} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{Prozentualer Leistungsvergleich (FLOPS)}
+    \label{fazit:flops}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {Leistungsvergleich -- Bandbreite},
+            ylabel = {Prozent der Peak-Bandbreite (zcopy)},
+            xtick = data,
+            symbolic x coords = {K20x,Vega 64},
+            x tick label style = {align=center},
+            enlarge x limits = 0.5,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = outer north east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma,
+            ybar,
+            %width = 0.75\textwidth,
+            scale only axis,
+            ymin = 0, ymax = 100,
+            ylabel near ticks,
+            xlabel near ticks
+        ]
+            \addplot table [x = acc, y = CUDA, col sep = semicolon]
+                           {data/bandwidth.csv};
+            \addlegendentry{CUDA} 
+
+            \addplot table [x = acc, y = HIP, col sep = semicolon]
+                           {data/bandwidth.csv};
+            \addlegendentry{HIP} 
+
+            \addplot table [x = acc, y = HC, col sep = semicolon]
+                           {data/bandwidth.csv};
+            \addlegendentry{HC} 
+
+            \addplot table [x = acc, y = CUDAQ, col sep = semicolon]
+                           {data/bandwidth.csv};
+            \addlegendentry{CUDA (Q\_rsqrt)} 
+
+            \addplot table [x = acc, y = SYCL, col sep = semicolon]
+                           {data/bandwidth.csv};
+            \addlegendentry{SYCL} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{Prozentualer Leistungsvergleich (Bandbreite)}
+    \label{fazit:bandbreite}
+\end{figure}
+
+CUDA ist angesichts seiner gegenwärtigen dominanten Stellung und der
+langjährigen Entwicklung des Ökosystems für NVIDIA-GPUs nahezu alternativlos.
+Gleichwohl ist mit SYCL ein interessanter Wettbewerber aufgetreten, der viele
+gute Ansätze von CUDA übernimmt und um eigene Techniken erweitert. Sofern der
+SYCL-Standard durch Hardware- und Software-Hersteller die notwendige
+Unterstützung erfährt, kann er zu einer guten, plattformübergreifenden
+Alternative zu CUDA werden und verdient daher weitere Untersuchungen.
+
+Der Einsatz von \gls{hc} an Stelle von \gls{hip}, wenn AMD-GPUs die einzige
+unterstützte Hardware-Plattform sein sollen, bietet zur Zeit keine Vorteile.
+Beide Spracherweiterungen erreichen ähnliche Ergebnisse auf derselben Hardware,
+\gls{hip} ist darüber hinaus einfacher auf NVIDIA-GPUs portierbar und verfügt
+mit den \texttt{hipStream}s über ein besseres System, mit dem sich
+Aufgabengraphen implementieren lassen. Der einzige Punkt, der für \gls{hc}
+spricht, ist das moderne C++-Interface.
+
 \subsection{Ausblick}
 \label{fazit:ausblick}
 
-\begin{itemize}
-    \item Rechtsstreit Oracle - Google -> Ende für HIP?
-    \item SYCL auf FPGA
-\end{itemize}
+Weitere Aspekte der Spracherweiterungen, die in dieser Arbeit nicht behandelt
+wurden, bedürfen noch der Untersuchung. Insbesondere das Feld der
+Multi-GPU-Programmierung verdient mehr Beachtung. Der SYCL-Standard kennt z.B.
+das Konzept von Peer-to-Peer-Kopien zwischen direkt verbundenen GPUs nicht. Hier
+wäre zu prüfen, inwieweit die vorhandenen Implementierungen von dieser Fähigkeit
+Gebrauch machen (können). Auch der direkte Zugriff auf den globalen Speicher
+benachbarter GPUs, wie er im CUDA-Umfeld über
+\textit{remote direct memory access} (RDMA) möglich ist, ist in den anderen
+Spracherweiterungen möglicherweise gar nicht vorhanden oder hinter abstrakten
+Konzepten versteckt.
+
+Ein weiteres Thema ist die Untersuchung der Spracherweiterungen auf Hardware,
+die im klassischen HPC eher selten anzutreffen ist. Codeplays eigentliches
+Geschäft findet zu großen Teilen im Embedded-Bereich statt. Eine Untersuchung
+der SYCL-Implementierung auf Systemen mit sehr niedrigem Energiebedarf könnte
+daher interessante Erkenntnisse bieten. Ähnlich verhält es sich mit \gls{fpga}s,
+die experimentell über die von Xilinx vorangetriebene triSYCL-Implementierung
+angesprochen werden können. Hier wäre beispielsweise zu prüfen, wie portabel
+die erreichte Performanz zwischen verschiedenen Beschleunigerfamilien wie
+GPUs und \gls{fpga}s ist.
+
+Aus einer nichttechnischen Perspektive ist der Ausgang des gegenwärtig vor
+dem Obersten Gerichtshof der Vereinigten Staaten verhandelten Prozesses zwischen
+den Firmen Oracle und Google von großer Relevanz. Oracle sieht eine Verletzung
+seiner Urheberrechte in der durch Google für die Android-Plattform erstellten
+Kopie des Java-\gls{api}. Da \gls{hip} ebenfalls eine Kopie eines anderen
+\gls{api} ist, wird das Urteil auch auf diesen Fall anwendbar sein.
+(vgl.~\cite{golem2019})
 
 \subsection{Notizen}
 

@@ -588,8 +588,10 @@ Der nächste performanzrelevante Faktor ist die Größe der Kacheln selbst. Aus 
 in den Abbildungen~\ref{amd:nbody:tilesize-hc} und \ref{amd:nbody:tilesize-hip}
 dargestellten Messergebnissen wird ersichtlich, dass die Kachelgröße für den
 Benchmark weniger wichtig ist; relevante Unterschiede sind nur bei großen
-Kachelgrößen und wenigen Elementen sichtbar. Für den weiteren Messverlauf wird
-daher eine Kachelgröße von $p = 256$ angenommen.
+Kachelgrößen und wenigen Elementen sichtbar. Das ist ein wesentlicher
+Unterschied zu den in Abschnitt~\ref{nvidia:nbody:auswertung} für NVIDIA-GPUs
+gemessenen Ergebnissen, die von der Kachelgröße stark beeinflusst wurden. Für
+den weiteren Messverlauf wird daher eine Kachelgröße von $p = 256$ angenommen.
 
 \begin{figure}
     \centering

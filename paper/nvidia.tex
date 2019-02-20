@@ -78,7 +78,6 @@ Schreibzugriff) oder $1 \cdot 10^{-9}$ (Schreibzugriff) annehmen kann.
 
 Der Quelltext~\ref{nvidia:zcopy:befehle} zeigt die verwendeten Compiler-Flags.
 
-
 \begin{code}
     \begin{minted}[fontsize=\small]{bash}
 # CUDA-Compiler
@@ -88,7 +87,7 @@ nvcc -std=c++14 -O3 -gencode arch=compute_35,code=sm_35
 hipcc -O3 -std=c++14 -gencode arch=compute_35,code=sm_35
 
 # SYCL-Compiler
-compute++ -std=c++17 -O3
+compute++ -std=c++17 -O3 -sycl-driver -sycl-target ptx64
     \end{minted}
     \caption{Compiler-Flags für zcopy}
     \label{nvidia:zcopy:befehle}
@@ -652,6 +651,26 @@ Abbildung~\ref{nvidia:reduction:peak}).
 
 \subsection{N-Body}
 
+\subsubsection{Implementierung}
+
+Die theoretische Funktion~\ref{methoden:nbody:gpu:bodybodyinteraction}, die die
+Interaktion zwischen zwei Körpern berechnet, wurde in allen Spracherweiterungen
+umgesetzt. Durch den Einsatz von \gls{fma}-Operationen werden die benötigten
+\gls{flops} für die Berechnung des Skalarprodukts sowie der Beschleunigung
+verringert. Die inverse Wurzel wird durch die \texttt{rsqrt}-Funktion berechnet.
+Die Quelltexte~\ref{anhang:cuda:bodybodyinteraction} (CUDA),
+\ref{anhang:hip:bodybodyinteraction} und \ref{anhang:sycl:bodybodyinteraction}
+(SYCL) im Anhang dieser Arbeit zeigen die konkrete Implementierung.
+
+Die theoretischen Funktionen~\ref{methoden:nbody:gpu:tilecalculation} und
+\ref{methoden:nbody:gpu:calcforces} wurden zusammengefasst, da erstere
+nur aus einer kurzen Schleife besteht. Überdies wurde der Compiler angewiesen,
+die Schleife auszurollen (siehe auch den nächsten Abschnitt). Diese
+Implementierungen finden sich in den angehängten
+Quelltexten~\ref{anhang:cuda:forcecalculation} (CUDA),
+\ref{anhang:hip:forcecalculation} (HIP) bzw. \ref{anhang:sycl:forcecalculation}
+(SYCL).
+
 Ein gesonderter Vergleich ist zwischen CUDA und SYCL nötig, da das
 experimentelle Backend für NVIDIA-GPUs der ComputeCpp-Implementierung die
 Funktion \texttt{rsqrtf} für die reziproke Quadratwurzel nicht unterstützt. Da
@@ -680,3 +699,420 @@ auto Q_rsqrt(float number) -> float
     \caption{Quake-3-Implementierung der rsqrt-Funktion}
     \label{nvidia:nbody:qrsqrt}
 \end{code}
+
+\subsubsection{Optimierung und Auswertung}
+\label{nvidia:nbody:auswertung}
+
+Eine einfache Optimierung ist das Ausrollen der Schleife, die nacheinander die
+Interaktionen berechnet. Dadurch erhöht sich der Registerbedarf pro Thread, der
+Overhead, der durch Verzweigungsinstruktionen anfällt, wird jedoch verringert.
+Dieser Effekt ist deutlich in der Abbildungen~\ref{nvidia:nbody:unroll:cuda} zu
+sehen:  durch die Bestimmung eines besseren Ausrollfaktors lassen sich in diesem
+Benchmark bei einer festen Kachelgröße von $p = 256$ knapp \num{600} GFLOPS mehr
+Durchsatz gewinnen. Dieses Verhalten kann auch bei der Implementierung mit
+\gls{hip} (siehe Abbildung~\ref{anhang:nvidia:nbody:unroll:hip}) beobachtet
+werden, nicht jedoch bei SYCL (siehe
+Abbildung~\ref{nvidia:nbody:unroll:sycl}). Hier ist zu vermuten, dass der
+Compiler den Ausrollfaktor ignoriert oder nicht zu verarbeiten weiß.
+
+\begin{figure}
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {Ausrollen -- CUDA},
+            xlabel = {Ausrollfaktor},
+            ylabel = {GFLOPS},
+            xmode = log,
+            log basis x = 2,
+            xmin = 1, xmax = 1024,
+            xtick = {1,2,4,8,16,32,64,128,256,512,1024},
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = outer north east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = count, y = CUDA, col sep = semicolon]
+                           {data/nbody-nvidia-unroll-524288.csv};
+            \addlegendentry{$n = 524.288$} 
+
+            \addplot table [x = count, y = CUDA, col sep = semicolon]
+                           {data/nbody-nvidia-unroll-65536.csv};
+            \addlegendentry{$n = 65.536$} 
+
+            \addplot table [x = count, y = CUDA, col sep = semicolon]
+                           {data/nbody-nvidia-unroll-8192.csv};
+            \addlegendentry{$n = 8.192$} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{Performanzgewinn durch das Ausrollen der Schleife (CUDA)}
+    \label{nvidia:nbody:unroll:cuda}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {Ausrollen -- SYCL},
+            xlabel = {Ausrollfaktor},
+            ylabel = {GFLOPS},
+            xmode = log,
+            log basis x = 2,
+            xmin = 1, xmax = 1024,
+            xtick = {1,2,4,8,16,32,64,128,256,512,1024},
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = outer north east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = count, y = SYCL, col sep = semicolon]
+                           {data/nbody-nvidia-unroll-524288.csv};
+            \addlegendentry{$n = 524.288$} 
+
+            \addplot table [x = count, y = SYCL, col sep = semicolon]
+                           {data/nbody-nvidia-unroll-65536.csv};
+            \addlegendentry{$n = 65.536$} 
+
+            \addplot table [x = count, y = SYCL, col sep = semicolon]
+                           {data/nbody-nvidia-unroll-8192.csv};
+            \addlegendentry{$n = 8.192$} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{Performanzgewinn durch das Ausrollen der Schleife (SYCL)}
+    \label{nvidia:nbody:unroll:sycl}
+\end{figure}
+
+Es ist außerdem festzustellen, dass der Ausrollfaktor auf \gls{hip} einen
+ähnlichen Einfluss wie auf CUDA hat. \gls{hip} erreicht jedoch bei kleinen und
+großen Faktoren weniger \gls{flops} als CUDA, während mittlere Faktoren ähnliche
+Ergebnisse erzielen (siehe Abbildung~\ref{nvidia:nbody:unroll:cudahip}).
+Möglicherweise verhindern das Ummanteln des CUDA-\gls{api} durch das
+\gls{hip}-\gls{api} oder der Aufruf des \texttt{nvcc}-Compilers durch das
+\texttt{hipcc}-Skript einige kleinere Compiler-Optimierungen, die bei nativem
+CUDA-Code möglich wären.
+
+Anhand dieser Messung wurde für den weiteren Verlauf ein Ausrollfaktor von 64
+festgelegt.
+
+\begin{figure}
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {Ausrollen -- CUDA und HIP},
+            xlabel = {Ausrollfaktor},
+            ylabel = {GFLOPS},
+            xmode = log,
+            log basis x = 2,
+            xmin = 1, xmax = 1024,
+            xtick = {1,2,4,8,16,32,64,128,256,512,1024},
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = outer north east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = count, y = CUDA, col sep = semicolon]
+                           {data/nbody-nvidia-unroll-524288.csv};
+            \addlegendentry{CUDA} 
+
+            \addplot table [x = count, y = HIP, col sep = semicolon]
+                           {data/nbody-nvidia-unroll-524288.csv};
+            \addlegendentry{HIP} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{Vergleich der Ausrollfaktoren zwischen CUDA und HIP ($n = 524.288$)}
+    \label{nvidia:nbody:unroll:cudahip}
+\end{figure}
+
+Der nächste performanzrelevante Faktor ist die Größe der Kacheln selbst. Aus den
+in der Abbildung~\ref{nvidia:nbody:tilesize:cuda} dargestellten Messergebnissen
+wird ersichtlich, dass die gewählte Kachelgröße auf die Leistung einen
+erheblichen Einfluss haben kann. Auch dieses Verhalten ist bei \gls{hip} (siehe
+Abbildung~\ref{anhang:nvidia:nbody:tilesize:hip}) und SYCL (siehe
+Abbildung~\ref{anhang:nvidia:nbody:tilesize:sycl}) feststellbar. Für den
+weiteren Messverlauf wird daher eine Kachelgröße von $p = 512$ angenommen.
+
+\begin{figure}
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {Kachelgrößen -- CUDA},
+            xlabel = {Kachelgröße},
+            ylabel = {GFLOPS},
+            xmode = log,
+            log basis x = 2,
+            xtick = {32,64,128,256,512,1024},
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = outer north east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = tilesize, y = CUDA, col sep = semicolon]
+                           {data/nbody-nvidia-tilesize-524288.csv};
+            \addlegendentry{$n = 524.288$} 
+
+            \addplot table [x = tilesize, y = CUDA, col sep = semicolon]
+                           {data/nbody-nvidia-tilesize-65536.csv};
+            \addlegendentry{$n = 65.536$} 
+
+            \addplot table [x = tilesize, y = CUDA, col sep = semicolon]
+                           {data/nbody-nvidia-tilesize-8192.csv};
+            \addlegendentry{$n = 8.192$} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{Performanz bei verschiedenen Kachelgrößen (CUDA)}
+    \label{nvidia:nbody:tilesize:cuda}
+\end{figure}
+
+Mit der experimentell ermittelten Konfiguration lässt sich ein direkter
+Vergleich zwischen CUDA und \gls{hip} einerseits sowie CUDA (mit
+\texttt{Q\_rsqrt}) und SYCL andererseits anstellen. Die
+Abbildung~\ref{nvidia:nbody:comparisonhip} zeigt, dass die Performanz bei CUDA
+und \gls{hip} nahezu identisch ist. Der Blick in den generierten Maschinen-Code
+zeigt, dass der \texttt{nvcc}-Compiler und der \texttt{hcc}-Wrapper um
+\texttt{nvcc} dasselbe Ergebnis erzeugen (siehe
+Quelltexte~\ref{nvidia:nbody:ptxnvcc} und \ref{nvidia:nbody:ptxhip}).
+
+\begin{figure}
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {Leistungsvergleich -- CUDA und HIP},
+            xlabel = {$n$},
+            ylabel = {GFLOPS},
+            xtick = data,
+            xmode = log,
+            log basis x = 2,
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = outer north east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma,
+            ybar,
+            width = 0.75\textwidth,
+            scale only axis,
+            ymin = 0, ymax = 4000,
+            extra y ticks = 3935,
+            extra y tick labels = {\num{3935}},
+            extra y tick style={grid=major, major grid style={solid,thick,draw=red}},
+            scaled y ticks = false,
+            ylabel near ticks,
+            xlabel near ticks
+        ]
+            \addplot table [x = n, y = CUDA, col sep = semicolon]
+                           {data/nbody-nvidia.csv};
+            \addlegendentry{CUDA} 
+
+            \addplot table [x = n, y = HIP, col sep = semicolon]
+                           {data/nbody-nvidia.csv};
+            \addlegendentry{HIP} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{Leistungsvergleich zwischen CUDA und HIP}
+    \label{nvidia:nbody:comparisonhip}
+\end{figure}
+
+\begin{figure}
+    \begin{minipage}{0.5\textwidth}
+        \centering
+        \begin{minted}[fontsize=\footnotesize]{text}
+shl.b32 %r29, %r42, 4;
+add.s32 %r31, %r22, %r29;
+ld.shared.v4.f32 {%f50, %f51, %f52,
+                  %f53}, [%r31];
+sub.f32 %f58, %f50, %f35;
+sub.f32 %f59, %f51, %f36;
+sub.f32 %f60, %f52, %f37;
+mov.f32 %f61, 0f358637BE;
+fma.rn.f32 %f62, %f60, %f60, %f61;
+fma.rn.f32 %f63, %f59, %f59, %f62;
+fma.rn.f32 %f64, %f58, %f58, %f63;
+mul.f32 %f65, %f64, %f64;
+mul.f32 %f66, %f64, %f65;
+rsqrt.approx.f32 %f67, %f66;
+mul.f32 %f68, %f53, %f67;
+fma.rn.f32 %f69, %f58, %f68, %f21590;
+fma.rn.f32 %f70, %f59, %f68, %f21589;
+fma.rn.f32 %f71, %f60, %f68, %f21588;
+        \end{minted}
+        \captionof{listing}{Maschinencode des CUDA-Kernels}
+        \label{nvidia:nbody:ptxnvcc}
+    \end{minipage}
+    %
+    \begin{minipage}{0.5\textwidth}
+        \centering
+        \begin{minted}[fontsize=\footnotesize]{text}
+shl.b32 %r29, %r42, 4;
+add.s32 %r31, %r22, %r29;
+ld.shared.v4.f32 {%f50, %f51, %f52,
+                  %f53}, [%r31];
+sub.f32 %f58, %f50, %f35;
+sub.f32 %f59, %f51, %f36;
+sub.f32 %f60, %f52, %f37;
+mov.f32 %f61, 0f358637BE;
+fma.rn.f32 %f62, %f60, %f60, %f61;
+fma.rn.f32 %f63, %f59, %f59, %f62;
+fma.rn.f32 %f64, %f58, %f58, %f63;
+mul.f32 %f65, %f64, %f64;
+mul.f32 %f66, %f64, %f65;
+rsqrt.approx.f32 %f67, %f66;
+mul.f32 %f68, %f53, %f67;
+fma.rn.f32 %f69, %f58, %f68, %f21590;
+fma.rn.f32 %f70, %f59, %f68, %f21589;
+fma.rn.f32 %f71, %f60, %f68, %f21588;
+        \end{minted}
+        \captionof{listing}{Maschinencode des HIP-Kernels}
+        \label{nvidia:nbody:ptxhip}
+    \end{minipage}
+\end{figure}
+
+Die Abbildung~\ref{nvidia:nbody:comparisonsycl} zeigt die Ergebnisse des
+Vergleichs zwischen CUDA (mit \texttt{Q\_rsqrt}) und SYCL. Beide
+Implementierungen erreichen ähnliche Ergebnisse, wobei CUDA zumeist etwas
+schneller arbeitet. Die Quelltexte~\ref{nvidia:nbody:ptxnvcc-qrsqrt} (CUDA) und
+\ref{nvidia:nbody:ptxsycl} (SYCL) zeigen außerdem merkliche Unterschiede
+zwischen den generierten Maschinen-Codes, was möglicherweise CUDAs bessere
+Ergebnisse erklärt.
+
+\begin{figure}
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {Leistungsvergleich -- CUDA und SYCL},
+            xlabel = {$n$},
+            ylabel = {GFLOPS},
+            xtick = data,
+            xmode = log,
+            log basis x = 2,
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = outer north east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma,
+            ybar,
+            width = 0.75\textwidth,
+            scale only axis,
+            ymin = 0, ymax = 4000,
+            extra y ticks = 3935,
+            extra y tick labels = {\num{3935}},
+            extra y tick style={grid=major, major grid style={solid,thick,draw=red}},
+            scaled y ticks = false,
+            ylabel near ticks,
+            xlabel near ticks
+        ]
+            \addplot table [x = n, y = CUDAQ, col sep = semicolon]
+                           {data/nbody-nvidia.csv};
+            \addlegendentry{CUDA} 
+
+            \addplot table [x = n, y = SYCL, col sep = semicolon]
+                           {data/nbody-nvidia.csv};
+            \addlegendentry{SYCL} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{Leistungsvergleich zwischen CUDA (mit Q\_rsqrt) und SYCL}
+    \label{nvidia:nbody:comparisonsycl}
+\end{figure}
+
+\begin{figure}
+    \begin{minipage}{0.5\textwidth}
+        \centering
+        \begin{minted}[fontsize=\footnotesize]{text}
+ld.shared.v4.f32 {%f50, %f51, %f52,
+                  %f53}, [%r31];
+sub.f32 %f58, %f50, %f35;
+sub.f32 %f59, %f51, %f36;
+sub.f32 %f60, %f52, %f37;
+mov.f32 %f61, 0f358637BE;
+fma.rn.f32 %f62, %f60, %f60, %f61;
+fma.rn.f32 %f63, %f59, %f59, %f62;
+fma.rn.f32 %f64, %f58, %f58, %f63;
+mul.f32 %f65, %f64, %f64;
+mul.f32 %f66, %f64, %f65;
+mul.f32 %f67, %f66, 0f3F000000;
+mov.b32 %r32, %f66;
+shr.s32 %r33, %r32, 1;
+mov.u32 %r34, 1597463007;
+sub.s32 %r35, %r34, %r33;
+mov.b32 %f68, %r35;
+mul.f32 %f69, %f67, %f68;
+mul.f32 %f70, %f68, %f69;
+mov.f32 %f71, 0f3FC00000;
+sub.f32 %f72, %f71, %f70;
+mul.f32 %f73, %f68, %f72;
+mul.f32 %f74, %f53, %f73;
+fma.rn.f32 %f75, %f58, %f74, %f13403;
+fma.rn.f32 %f76, %f59, %f74, %f13402;
+fma.rn.f32 %f77, %f60, %f74, %f13401;
+        \end{minted}
+        \captionof{listing}{Maschinencode des CUDA-Kernels (mit Q\_rsqrt)}
+        \label{nvidia:nbody:ptxnvcc-qrsqrt}
+    \end{minipage}
+    %
+    \begin{minipage}{0.5\textwidth}
+        \centering
+        \begin{minted}[fontsize=\footnotesize]{text}
+ld.shared.v4.f32 {%f33, %f34, %f35,
+                  %f36}, [%rd25];
+sub.rn.f32 %f37, %f33, %f1;
+sub.rn.f32 %f38, %f34, %f2;
+sub.rn.f32 %f39, %f35, %f3;
+fma.rn.f32 %f40, %f39, %f39,
+           0f358637BE;
+fma.rn.f32 %f41, %f38, %f38, %f40;
+fma.rn.f32 %f42, %f37, %f37, %f41;
+mul.rn.f32 %f43, %f42, %f42;
+mul.rn.f32 %f44, %f42, %f43;
+mul.rn.f32 %f45, %f44, 0fBF000000;
+mov.b32 %r13, %f44;
+shr.s32 %r14, %r13, 1;
+sub.s32 %r16, %r15, %r14;
+mov.b32 %f46, %r16;
+mul.rn.f32 %f47, %f45, %f46;
+mul.rn.f32 %f48, %f47, %f46;
+add.rn.f32 %f49, %f48, 0f3FC00000;
+mul.rn.f32 %f50, %f49, %f46;
+mul.rn.f32 %f51, %f36, %f50;
+fma.rn.f32 %f76, %f39, %f51, %f76;
+fma.rn.f32 %f75, %f38, %f51, %f75;
+fma.rn.f32 %f74, %f37, %f51, %f74;
+        \end{minted}
+        \captionof{listing}{Maschinencode des SYCL-Kernels}
+        \label{nvidia:nbody:ptxsycl}
+    \end{minipage}
+\end{figure}
