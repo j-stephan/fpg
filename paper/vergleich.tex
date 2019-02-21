@@ -126,8 +126,8 @@ Hauptspeicher liegenden Daten auf eine oder mehrere GPUs.
 
 Die obigen Punkte sind alle eng mit dem Aspekt der Datenlokalität verknüpft.
 Im GPU-Kontext ist vornehmlich relevant, inwiefern sich die einzelnen
-Ebenen der Speicherhierarchie (GPU-globaler Speicher, lokaler Speicher und Cache
-der auf der GPU verbauten parallelen Prozessoren, Register der einzelnen
+Ebenen der Speicherhierarchie (globaler Speicher der GPU, lokaler Speicher und
+Cache der auf der GPU verbauten parallelen Prozessoren, Register der einzelnen
 Threads) durch die Spracherweiterungen ansteuern und nutzen lassen.
 
 \subsubsection{Aufgabensicht}
@@ -195,12 +195,12 @@ Device-Compiler \texttt{cicc} in die Maschinensprache der Ziel-GPU übersetzt.
 
 Der Quelltext~\ref{vergleich:cuda:einfuehrung:vecadd} zeigt einen
 Beispiel-Kernel in CUDA. Das Schlüsselwort \texttt{\_\_global\_\_} markiert
-einen Kernel, der vom Compiler extrahiert und für das Device übersetzt wird. Das
-Schlüsselwort \texttt{\_\_device\_\_} markiert Funktionen, die innerhalb eines
-Kernels aufgerufen werden können, jedoch keine eigenständigen Kernel darstellen.
-Die letzte Zeile zeigt den Aufruf des Kernels aus dem Host-Code heraus. Die hier
-sichtbaren Konzepte der Blocks und Threads werden in den nächsten Abschnitten
-ausführlich erklärt.
+einen Kernel, der vom Compiler extrahiert und für das Device übersetzt wird. Mit
+dem Schlüsselwort \texttt{\_\_device\_\_} werden Funktionen markiert, die
+innerhalb eines Kernels aufgerufen werden können, selbst jedoch keine
+eigenständigen Kernel darstellen. Die letzte Zeile zeigt den Aufruf des Kernels
+aus dem Host-Code heraus. Die hier sichtbaren Konzepte der Blocks und Threads
+werden in den nächsten Abschnitten ausführlich erklärt.
 
 \begin{code}
     \begin{minted}[breaklines,breakafter=\,,escapeinside=||,fontsize=\small]{cuda}
@@ -240,14 +240,20 @@ Die nächsthöhere Ebene bilden \textit{blocks}, die aus bis zu \num{1024}
 \textit{thread}-Zahl in $x$-, $y$- und $z$-Richtung darf \num{1024} also nicht
 übersteigen). Während die Anzahl der \textit{threads} in diesem Rahmen frei
 wählbar ist, bedingt die feste \textit{warp}-Größe, dass eine
-\textit{block}-Größe ein Vielfaches von 32 sein sollte, da andernfalls
-überzählige \textit{threads} versteckt ausgeführt werden. Ein \textit{block}
-wird genau einem Multiprozessor zugeordnet und von diesem ausgeführt. Sind mehr
-\textit{blocks} als Multiprozessoren vorhanden, werden \textit{blocks}, die
-z.B.\ durch Speicherzugriffe blockiert sind, von ihren Multiprozessoren entfernt
-und durch wartende \textit{blocks} ersetzt. Dieser Kontextwechsel geschieht auf
-einer GPU deutlich schneller als auf einer CPU und ist nur mit wenigen Zyklen
-verbunden.
+\textit{block}-Größe ein Vielfaches von 32 sein sollte. Andernfalls könnte
+der letzte \textit{warp} jedes \textit{blocks} nicht vollständig genutzt werden,
+was zu geringerer Parallelität auf \textit{thread}-Ebene führen würde. Ein
+\textit{block} wird genau einem Multiprozessor zugeordnet und von diesem
+ausgeführt. Sind mehr \textit{blocks} als Multiprozessoren vorhanden, werden
+\textit{blocks}, die z.B.\ durch Speicherzugriffe blockiert sind, vom Scheduler
+in einen wartenden Zustand versetzt und durch wartende, aber bereite
+\textit{blocks} ersetzt. Dieser Kontextwechsel geschieht auf einer GPU bei einer
+geringen Anzahl von \textit{blocks} pro Multiprozessor deutlich schneller als
+auf einer CPU und ist mit nur wenigen Zyklen verbunden, da die verwendeten
+Register und Caches nicht geleert und im Speicher hinterlegt werden müssen. Eine
+zu hohe Zahl von \textit{blocks} pro Multiprozessor kann im Umkehrschluss einen
+gegenteiligen Effekt hervorrufen, durch den der Kontextwechsel nicht mehr derart
+performant ist.
 
 Alle \textit{threads} eines \textit{blocks} können untereinander über den
 Speicher des Multiprozessors kommunizieren (\textit{shared memory}). Barrieren
@@ -451,10 +457,10 @@ Zugriffe auf den \textit{global memory} erfolgen über L1- (pro Multiprozessor)
 und L2-Caches (alle Multiprozessoren). Die Caches lassen sich vom Programmierer
 nicht direkt ansteuern.
 
-\textit{Constant memory} ist ein spezieller Cache, der vom Programmierer selbst
-befüllt werden muss. Er ermöglicht deutlich schnellere Speicherzugriffe, wenn
-alle \textit{threads} eines \textit{warps} gleichzeitig auf das gleiche Datum
-zugreifen.
+\textit{Constant memory} liegt im \textit{global memory}, wird aber auf eine
+spezielle Weise in den Cache geladen. Er ermöglicht deutlich schnellere
+Speicherzugriffe, wenn alle \textit{threads} eines \textit{warps} gleichzeitig
+auf dasselbe Datum zugreifen.
 
 Operationen, die die Textureinheiten der GPU verwenden, können über die
 Textur-Caches der GPU lesend auf den \textit{global memory} zugreifen. Diese
@@ -644,20 +650,20 @@ und GPU-relevante Features.
 
 HC-Kernel können entweder als separate Funktionen oder Funktoren geschrieben 
 oder als Lambda-Funktionen direkt in den C++-Quelltext eingebettet werden. Der
-\texttt{hcc}-Compiler extrahiert die Kernel aus dem sie umgebenden Quelltext
-und übersetzt sie in den GPU-Maschinencode, während der restliche Quelltext
-in den CPU-Maschinencode umgewandelt wird. Wie bei CUDA wird der komplette
-Quelltext also in einem Schritt kompiliert.
+Compiler extrahiert die Kernel aus dem sie umgebenden Quelltext und übersetzt
+sie in den GPU-Maschinencode, während der restliche Quelltext in den
+CPU-Maschinencode umgewandelt wird. Der komplette Quelltext wird also in einem
+Schritt kompiliert.
 
 Unglücklicherweise ist die Dokumentationslage des \gls{hc}-\gls{api} sehr
 schlecht. Es gibt von AMD keine öffentlich zugänglichen Dokumente, die der
 CUDA-Dokumentation in Umfang und Inhalt nahe kämen. Die in den folgenden
 Abschnitten präsentierten Erkenntnisse basieren auf der unvollständigen
 \gls{hc}-\gls{api}-Referenz, die ein AMD-Angestellter auf seiner privaten
-GitHub-Seite zur Verfügung stellt (vgl.~\cite{hcref}), der C++AMP-Spezifikation aus
-dem Jahr 2012\footnote{Die Features der Ende 2013 veröffentlichten Spezifikation
-für C++AMP 1.2 werden von HC nicht unterstützt.} (vgl.~\cite{cppamp2012}) und
-eigenen Experimenten.
+GitHub-Seite zur Verfügung stellt (vgl.~\cite{hcref}), der C++AMP-Spezifikation
+aus dem Jahr 2012\footnote{Die Features der Ende 2013 veröffentlichten
+Spezifikation für C++AMP 1.2 werden von HC nicht unterstützt.}
+(vgl.~\cite{cppamp2012}) und
 
 Der Quelltext~\ref{vergleich:hc:einfuehrung:vecadd} zeigt einen in HC
 geschriebenen Beispielkernel. Device-Funktionen und Kernel werden beide
@@ -899,9 +905,9 @@ hc::copy(a_d, b_d);
 \texttt{hc::array\_view} wird dagegen keiner GPU direkt zugeordnet. Bei einem
 Zugriff auf den auf einer GPU liegenden und von \texttt{hc::array\_view}
 verwalteten Speicher durch eine andere GPU wird der Prozess der Datenbewegung
-grundsätzlich verborgen. Er lässt sich jedoch durch den Befehl
-\texttt{hc::array\_view::synchronize\_to()} vom Programmierer zu einem von ihm
-gewählten Zeitpunkt auslösen.
+grundsätzlich verborgen. Zu einem von ihm gewählten Zeitpunkt kann der
+Programmierer den Vorgang jedoch durch den Befehl
+\texttt{hc::array\_view::synchronize\_to()} auslösen.
 
 \paragraph{Datenlokalität}
 
@@ -1002,12 +1008,12 @@ des Compilers, Kernel und aufgerufen Funktionen zu erkennen und für das
 Ziel-Device zu übersetzen.
 
 Um die Portabilität zu gewährleisten, wird der Quelltext in mehreren Phasen
-übersetzt. Der Host-spezifische Quelltext wird einmal vom System-Compiler
+übersetzt. Der Quelltext für den Host wird einmal vom System-Compiler
 kompiliert, der Device-spezifische Code einmal für jedes Ziel-Device durch den
 jeweiligen Device-Compiler. Code, der sowohl auf AMD als auch NVIDIA-GPUs
 zur Ausführung gebracht werden soll, benötigt also einen Device-Compiler,
 der den AMD-GPU-Befehlssatz beherrscht und zusätzlich einen weiteren
-Device-Compiler, der den NVIDIA-GPU-Befehlssatz kennt. Der so generierte
+Device-Compiler, der den Befehlssatz für NVIDIA-GPUs kennt. Der so generierte
 Maschinen-Code wird in die ausführbare Datei eingebettet und zur Laufzeit
 ausgewählt. (vgl.~\cite{syclspec}, S.\ 262)
 
@@ -1127,7 +1133,9 @@ Intrinsiken oder Befehle, die die Kommunikation innerhalb dieser
 Hardware-spezifischen Threadgruppen ermöglichen. Eine Nutzung von
 herstellerspezifischen Erweiterungen (wie bei \gls{opencl}) ist für SYCL-Kernel
 nicht vorgesehen, hier ist nur der \glqq Umweg\grqq\ über \gls{opencl}-Kernel
-möglich.
+möglich. Das Schreiben hochperformanter Kernel setzt jedoch gelegentlich die
+Nutzung solcher Intrinsiken voraus, weshalb SYCL gegenüber den anderen
+Spracherweiterungen im Nachteil ist.
 
 \subsubsection{Datensicht}
 
@@ -1325,7 +1333,7 @@ definiert werden, werden automatisch in diesem Speicherbereich abgelegt.
 Aufgabengraphen sind ein inhärentes Prinzip des SYCL-Standards. Grundsätzlich
 sind alle Kernel asynchron zueinander; sofern Abhängigkeiten bestehen, ist es
 Aufgabe der SYCL-Laufzeitumgebung, diese zu erkennen und die Kernel-Ausführung
-entsprechend zu serialisieren. (vgl.~\cite{syclspec}, Abschnitt 3.4.1.2)
+entsprechend zu serialisieren. (vgl. \cite{syclspec}, Abschnitt 3.4.1.2)
 
 Der in der Abbildung~\ref{vergleich:anforderungen:aufgabensicht:graph} gezeigte
 Beispielgraph lässt sich in SYCL wie in
@@ -1388,3 +1396,26 @@ finden sind, sind für den Programmierer einfach verständlich (in SYCLs Fall
 sogar ein implizites Sprach-Feature) und gut auf komplexere Graphen skalierbar.
 \gls{hc}s Ansatz mit \texttt{futures} ist hier klar unterlegen, da die
 Implementierung komplexerer Graphen deutlich mehr Aufwand erfordert.
+
+Die in diesem Abschnitt vorgestellten Vergleichskriterien und ihre Erfüllung
+durch die Spracherweiterungen sind in der
+Tabelle~\ref{vergleich:zusammenfassung:tabelle} zusammengefasst.
+
+\begin{table}[htb]
+    \centering
+    \begin{tabularx}{\linewidth}{|X|X|X|X|X|}
+        \hline
+        Kriterium & CUDA & HIP & HC & SYCL\\ \hline\hline
+        explizite Datenbewegung & ja & ja & ja & ja\\ \hline
+        implizite Datenbewegung & ja & nein & ja & ja\\ \hline\hline
+        Datenanordnung (1D-Arrays) & Zeiger, entspricht Host & Zeiger, entspricht Host & opak, Anordnung verborgen & opak, Anordnung verborgen\\ \hline
+        Datenanordnung (2D-Arrays) & Zeiger, für GPU optimiert & nein & opak, Anordnung verborgen & opak, Anordnung verborgen\\\hline
+        Datenanordnung (3D-Arrays) & Zeiger, für GPU optimiert & Zeiger, für GPU optimiert & opak, Anordnung verborgen & opak, Anordnung verborgen\\\hline
+        Datenanordnung (Texturen) & opak, Anordnung verborgen & opak, Anordnung verborgen & nein & opak, Anordnung verborgen\\\hline\hline
+        Datenaffinität & explizite Befehle bei expliziter Bewegung, implizit bei impliziter Bewegung & explizite Befehle & implizit; explizite Befehle möglich & implizit\\\hline\hline
+        Datenlokalität & globaler Speicher, lokaler Speicher, programmierbare Caches & globaler Speicher, lokaler Speicher, programmierbare Caches (Texturen eingeschränkt) & globaler Speicher, lokaler Speicher & globaler Speicher, lokaler Speicher\\ \hline\hline
+        Aufgabengraphen & Asynchronitäts-API, Graph-API & Asynchronitäts-API & Asynchronitäts-API (eingeschränkt) & automatisch\\\hline
+    \end{tabularx}
+    \caption{Zusammenfassung der Spracherweiterungs-Features}
+    \label{vergleich:zusammenfassung:tabelle}
+\end{table}

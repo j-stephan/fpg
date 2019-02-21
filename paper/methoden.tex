@@ -77,6 +77,7 @@ Das theoretische GPU-Modell kennt drei Ebenen der Speicherhierarchie:
         lokaler Speicher & shared memory & \texttt{tile\_static} memory &
         local memory \\
         \hline
+        Register & register & register & -
     \end{tabular}
     \caption{Abbildung des Speicherkonzepte des Modells auf die Entsprechungen
              der Spracherweiterungen}
@@ -472,13 +473,14 @@ Körpers $i$ angewendet werden, wodurch sich die Berechnung weiter vereinfacht:
 \]
 
 Der numerische Integrator, der die Positionen und Geschwindigkeiten
-aktualisiert, ist ein Leapfrog-Verlet-Integrator (vgl.~\cite{verlet1967}), da er
-auf dieses Problem anwendbar und berechnungseffizient ist -- die Genauigkeit
-ist im Verhältnis zum Rechenaufwand hoch. Die Wahl der Integrationsmethode für
-N-Body-Simulationen hängt vom beobachteten System ab. Der Integrator wird in
-den Messungen mit erfasst, in dieser Arbeit jedoch nicht gesondert beschrieben,
-da er eine lineare Komplexität von $\mathcal{O}(n)$ besitzt und mit zunehmendem
-$n$ bedeutungslos wird.
+aktualisiert und auch in dieser Arbeit zum Einsatz kommt, ist ein
+Leapfrog-Verlet-Integrator (vgl.~\cite{verlet1967}). Er ist auf dieses Problem
+anwendbar und berechnungseffizient, d.h. die Genauigkeit ist im Verhältnis zum
+Rechenaufwand hoch. Die Wahl der Integrationsmethode für N-Body-Simulationen
+hängt vom beobachteten System ab. Der Integrator wird in den Messungen mit
+erfasst, in dieser Arbeit jedoch nicht gesondert beschrieben, da er eine lineare
+Komplexität von $\mathcal{O}(n)$ besitzt und mit zunehmendem $n$ bedeutungslos
+wird.
 
 \subsubsection{GPU-Implementierung}
 \label{methoden:nbody:gpu}

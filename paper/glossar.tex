@@ -47,17 +47,19 @@
                           plural = Devices}
 \newglossaryentry{singlesource}{name = {single-source compilation},
                                 description = {Die Quelltexte für Host und
-                                               Device werden gleichzeitig vom
-                                               Compiler für die
-                                               Zielarchitekturen übersetzt.}}
+                                               Device können sich in derselben
+                                               Datei befinden und werden
+                                               gleichzeitig vom Compiler
+                                               verarbeitet.}}
 \newglossaryentry{splitsource}{name = {split-source compilation},
                                description = {Die Quelltexte für Host und
-                                              Device werden getrennt kompiliert.
-                                              Der Host-Quelltext wird von einem
-                                              normalen Compiler übersetzt, der
-                                              Device-Quelltext erst zur Laufzeit
-                                              des Programms von einem weiteren
-                                              Compiler.}}
+                                              Device werden getrennt
+                                              verarbeitet. Der Host-Quelltext
+                                              wird von einem normalen Compiler
+                                              übersetzt, der Device-Quelltext
+                                              von einem weiteren Compiler und
+                                              unter Umständen erst zur Laufzeit
+                                              des Programms.}}
 \newglossaryentry{flop}{name = {FLOP},
                         description = {Fließkommaoperationen (engl.
                                         \textit{floating point operations}).},

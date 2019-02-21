@@ -24,33 +24,26 @@ Software verwendet wurde:
 \label{nvidia:zcopy:vorueberlegungen}
 
 Um eine optimale Ausnutzung der Speicherbandbreite zu erreichen, ist ein genauer
-Blick auf die verwendete Architektur erforderlich. Die K20x-GPUs weisen hier
-größere Unterschiede zu den P100- und V100-Modellen auf, die sich auf den
-betrachteten Benchmark auswirken können. Während die P100/V100-GPUs auf jedem
-Multiprozessor bei einfacher Genauigkeit \num{64} Hardware-Threads zur Verfügung
-haben, sind es bei den K20x-GPUs \num{192}. Ein Multiprozessor der
-P100/V100-GPUs kann somit zwei \textit{Warps} parallel ausführen, während auf
-der K20x-GPU sechs parallele \textit{Warps} pro Multiprozessor möglich sind. Die
-unterschiedliche \textit{Warp}-Zahl wirkt sich unter Umständen auf die
-Bandbreite des Speichers aus, da jeder K20x-Multiprozessor mehr Zugriffe
-benötigt als seine P100/V100-Gegenstücke. Aus diesem Grund werden auf der
-K20x-GPU und den P100/V100-GPUs Blockgrößen untersucht, die ein Vielfaches von
-\num{64} sind (bis \num{1024}). Zusätzlich werden auf der K20x Blockgrößen
-betrachtet, die ein Vielfaches von \num{192} sind (bis \num{768}), um eventuelle
-Effekte zu entdecken.
+Blick auf die verwendete Architektur erforderlich. Die K20x-GPUs verfügen auf
+jedem Multiprozessor bei einfacher Genauigkeit über \num{192} Hardware-Threads.
+Ein Multiprozessor kann somit sechs \textit{Warps} parallel ausführen. Ein
+häufiges Muster der CUDA-Programmierung ist die Verwendung von Blockgrößen, die
+eine Zweierpotenz darstellen. Aus diesem Grund werden auf Blockgrößen
+untersucht, die ein Vielfaches von \num{64} sind (bis \num{1024}). Zusätzlich
+werden auf der K20x Blockgrößen betrachtet, die ein Vielfaches von \num{192}
+sind (bis \num{768}), um eventuelle Effekte zu entdecken.
 
-Alle verwendeten NVIDIA-GPUs besitzen eine L1-Cacheline-Größe von \num{128}
-Byte. Speicherzugriffe der \textit{Warps} werden auf \textit{Half-Warps} (also
-\num{16} Threads des \textit{Warps}) aufgeteilt. Sofern alle Threads eines
-\textit{Half Warps} benachbarte \num{8}-Byte-Sequenzen laden, lassen sich diese
+Die K20x-GPU besitzt eine L1-Cacheline-Größe von \num{128} Byte
+(vgl.~\cite{pascalguide}, Abschnitt 1.4.3.2). Sofern alle Threads eines
+\textit{Warps} benachbarte \num{4}-Byte-Sequenzen laden, lassen sich diese
 Zugriffe in einer einzigen Cacheline vereinen, was die pro Thread verwendete
 Speicherbandbreite drastisch reduziert und eine insgesamt höhere Auslastung
 erlaubt.
 
 Um eine höhere Auslastung des Speicher-Controllers zu erreichen und die Anzahl
 der notwendigen Schleifendurchläufe innerhalb des Kernels zu verringern, wodurch
-sich die Zahl abhängiger Instruktionen verringert, werden die \num{8} Byte pro
-Thread in diesem Benchmark verdoppelt. Jeder Thread lädt also \num{16} Byte in
+sich die Zahl abhängiger Instruktionen verringert, werden die \num{4} Byte pro
+Thread in diesem Benchmark vervierfacht. Jeder Thread lädt also \num{16} Byte in
 Form eines Elements vom Typ \texttt{float4}. Die Anhang befindlichen
 Quelltexte~\ref{anhang:cuda:zcopy} (CUDA), \ref{anhang:hip:zcopy} (\gls{hip})
 und \ref{anhang:sycl:zcopy} (SYCL) zeigen die Kernel-Implementierungen der
@@ -114,7 +107,7 @@ Abbildung~\ref{nvidia:zcopy:k20xrwwo}).
     \centering
     \begin{tikzpicture}
         \begin{axis}[
-            title = {K20x -- zcopy -- Lesen + Schreiben -- generisch},
+            title = {K20x -- zcopy -- Lesen + Schreiben -- $2^x$ -- CUDA},
             xlabel = {Blöcke pro Multiprozessor},
             ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
             xmode = log,
@@ -161,7 +154,7 @@ Abbildung~\ref{nvidia:zcopy:k20xrwwo}).
             \addlegendentry{$\text{Blockgröße} = 1024$} 
         \end{axis}
     \end{tikzpicture}
-    \caption{zcopy: K20x-Bandbreite für generische Blöcke (Lesen und Schreiben, CUDA)}
+    \caption{zcopy: K20x-Bandbreite für Zweierpotenzen ($n = 117440512$, Lesen und Schreiben, CUDA)}
     \label{nvidia:zcopy:k20xgenerischrw}
 \end{figure}
 
@@ -169,7 +162,7 @@ Abbildung~\ref{nvidia:zcopy:k20xrwwo}).
     \centering
     \begin{tikzpicture}
         \begin{axis}[
-            title = {K20x -- zcopy -- Schreiben -- generisch},
+            title = {K20x -- zcopy -- Schreiben -- $2^x$ -- CUDA},
             xlabel = {Blöcke pro Multiprozessor},
             ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
             xmode = log,
@@ -216,7 +209,7 @@ Abbildung~\ref{nvidia:zcopy:k20xrwwo}).
             \addlegendentry{$\text{Blockgröße} = 1024$} 
         \end{axis}
     \end{tikzpicture}
-    \caption{zcopy: K20x-Bandbreite für generische Blöcke (Schreiben, CUDA)}
+    \caption{zcopy: K20x-Bandbreite für Zweierpotenzen ($n = 117440512$, Schreiben, CUDA)}
     \label{nvidia:zcopy:k20xgenerischw}
 \end{figure}
 
@@ -224,7 +217,7 @@ Abbildung~\ref{nvidia:zcopy:k20xrwwo}).
     \centering
     \begin{tikzpicture}
         \begin{axis}[
-            title = {K20x -- zcopy -- Lesen + Schreiben -- optimiert},
+            title = {K20x -- zcopy -- Lesen + Schreiben -- $192 \cdot 2^x$ -- CUDA},
             xlabel = {Blöcke pro Multiprozessor},
             ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
             xmode = log,
@@ -262,7 +255,7 @@ Abbildung~\ref{nvidia:zcopy:k20xrwwo}).
 
         \end{axis}
     \end{tikzpicture}
-    \caption{zcopy: K20x-Bandbreite für optimierte Blöcke (Lesen und Schreiben, CUDA)}
+    \caption{zcopy: K20x-Bandbreite für 192er-Vielfache ($n = 88080384$, Lesen und Schreiben, CUDA)}
     \label{nvidia:zcopy:k20xangepasstrw}
 \end{figure}
 
@@ -270,7 +263,7 @@ Abbildung~\ref{nvidia:zcopy:k20xrwwo}).
     \centering
     \begin{tikzpicture}
         \begin{axis}[
-            title = {K20x -- zcopy -- Schreiben -- optimiert},
+            title = {K20x -- zcopy -- Schreiben -- $192 \cdot 2^x$ -- CUDA},
             xlabel = {Blöcke pro Multiprozessor},
             ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
             xmode = log,
@@ -307,7 +300,7 @@ Abbildung~\ref{nvidia:zcopy:k20xrwwo}).
             \addlegendentry{$\text{Blockgröße} = 768$} 
         \end{axis}
     \end{tikzpicture}
-    \caption{zcopy: K20x-Bandbreite für optimierte Blöcke (Schreiben, CUDA)}
+    \caption{zcopy: K20x-Bandbreite für 192er-Vielfache ($n = 88080384$, Schreiben, CUDA)}
     \label{nvidia:zcopy:k20xangepasstw}
 \end{figure}
 
@@ -315,7 +308,7 @@ Abbildung~\ref{nvidia:zcopy:k20xrwwo}).
     \centering
     \begin{tikzpicture}
         \begin{axis}[
-            title = {K20x -- zcopy -- Schreiben -- generisch und optimiert},
+            title = {K20x -- zcopy -- Schreiben -- CUDA},
             xlabel = {Blöcke pro Multiprozessor},
             ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
             xmode = log,
@@ -347,8 +340,8 @@ Abbildung~\ref{nvidia:zcopy:k20xrwwo}).
             \addlegendentry{$\text{Blockgröße} = 1024$} 
         \end{axis}
     \end{tikzpicture}
-    \caption{zcopy: K20x-Bandbreite für generische und optimierte Blöcke
-             (Schreiben, CUDA)}
+    \caption{zcopy: K20x-Bandbreite für Zweierpotenz- ($n = 117440512$) und
+             192er-Größen ($n = 88080384$, Schreiben, CUDA)}
     \label{nvidia:zcopy:k20xvergleich}
 \end{figure}
 
@@ -356,7 +349,7 @@ Abbildung~\ref{nvidia:zcopy:k20xrwwo}).
     \centering
     \begin{tikzpicture}
         \begin{axis}[
-            title = {K20x -- zcopy -- optimiert},
+            title = {K20x -- zcopy -- CUDA},
             xlabel = {Blöcke pro Multiprozessor},
             ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
             xmode = log,
@@ -388,7 +381,7 @@ Abbildung~\ref{nvidia:zcopy:k20xrwwo}).
             \addlegendentry{Schreiben} 
         \end{axis}
     \end{tikzpicture}
-    \caption{zcopy: K20x-Bandbreite für 768er-Blöcke (CUDA)}
+    \caption{zcopy: K20x-Bandbreite für 768er-Blöcke ($n = 88080384$, CUDA)}
     \label{nvidia:zcopy:k20xrwwo}
 \end{figure}
 
@@ -405,7 +398,7 @@ Abbildung~\ref{nvidia:zcopy:k20xexts} zeigt.
     \centering
     \begin{tikzpicture}
         \begin{axis}[
-            title = {K20x -- zcopy -- Schreiben -- optimiert},
+            title = {K20x -- zcopy -- Schreiben},
             xlabel = {Blöcke pro Multiprozessor},
             ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
             xmode = log,
@@ -442,21 +435,26 @@ Abbildung~\ref{nvidia:zcopy:k20xexts} zeigt.
             \addlegendentry{SYCL} 
         \end{axis}
     \end{tikzpicture}
-    \caption{zcopy: K20x-Bandbreite für 768er-Blöcke (Schreiben)}
+    \caption{zcopy: K20x-Bandbreite für 768er-Blöcke ($n = 88080384$, Schreiben)}
     \label{nvidia:zcopy:k20xexts}
 \end{figure}
 
 Die K20x-GPU erreicht etwa 75\% der theoretisch möglichen Bandbreite (siehe
-Abbildung~\ref{nvidia:zcopy:k20xmax}). Dies ist durch das aktivierte ECC und
-die auf dem Taurus-System nicht steuerbaren Taktraten der GPU zu erklären. Für
-den Reduction-Benchmark wird daher eine tatsächlich erreichbare Obergrenze von
-\SI{188}{\gibi\byte\per\second} angenommen.
+Abbildung~\ref{nvidia:zcopy:k20xmax}). Dies ist durch das aktivierte ECC
+(vgl.~\cite{bestpractices}, Abschnitt 8.2.1) und eventuell vorhandene
+Ungenauigkeiten der Event-Systeme der Spracherweiterungen zu
+erklären\footnote{Der Einsatz geeigneter Profiler könnte aufgrund der besseren
+Zeitauflösung noch kleinere Änderungen der Ergebnisse bewirken. Da es aber für
+SYCL derzeit keine Profiler gibt, die auf NVIDIA-Hardware messen können, wurde
+an dieser Stelle darauf verzichtet.}. Für den Reduction-Benchmark wird daher
+eine tatsächlich erreichbare Obergrenze von \SI{188}{\gibi\byte\per\second}
+angenommen.
 
 \begin{figure}
     \centering
     \begin{tikzpicture}
         \begin{axis}[
-            title = {K20x -- zcopy -- optimiert},
+            title = {K20x -- zcopy -- Peak},
             xlabel = {Blöcke pro Multiprozessor},
             ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
             xmode = log,
@@ -494,7 +492,7 @@ den Reduction-Benchmark wird daher eine tatsächlich erreichbare Obergrenze von
             \addlegendentry{Peak}
         \end{axis}
     \end{tikzpicture}
-    \caption{zcopy: Theoretische und praktische K20x-Bandbreite für 768er-Blöcke}
+    \caption{zcopy: Theoretische und praktische K20x-Bandbreite für 768er-Blöcke ($n = 88080384$)}
     \label{nvidia:zcopy:k20xmax}
 \end{figure}
 
@@ -534,7 +532,7 @@ Ergebnisse zeigen sich für \gls{hip} (siehe
 Abbildung~\ref{anhang:nvidia:reduction:hip}) und SYCL (siehe
 Abbildung~\ref{anhang:nvidia:reduction:sycl}). Die SYCL-Variante zeigt zudem ein
 effizienteres Verhalten für Blöcke mit \num{128} Threads.  Da \num{256} Threads
-über alle Spracherweiterungen hinweg die  größte Auswahl an guten
+über alle Spracherweiterungen hinweg die beste Auswahl an
 Block-pro-Multiprozessor-Konfigurationen bieten, wurde im weiteren
 Benchmark-Verlauf diese Größe ausgewählt. Zwischen \num{8} und \num{1024}
 Blöcken pro Multiprozessor kommen für diese Größe verschiedene Konfigurationen
@@ -956,8 +954,8 @@ Quelltexte~\ref{nvidia:nbody:ptxnvcc} und \ref{nvidia:nbody:ptxhip}).
             width = 0.75\textwidth,
             scale only axis,
             ymin = 0, ymax = 4000,
-            extra y ticks = 3935,
-            extra y tick labels = {\num{3935}},
+            extra y ticks = {1967.5, 3935},
+            extra y tick labels = {},
             extra y tick style={grid=major, major grid style={solid,thick,draw=red}},
             scaled y ticks = false,
             ylabel near ticks,
@@ -972,7 +970,7 @@ Quelltexte~\ref{nvidia:nbody:ptxnvcc} und \ref{nvidia:nbody:ptxhip}).
             \addlegendentry{HIP} 
         \end{axis}
     \end{tikzpicture}
-    \caption{N-Body: Leistungsvergleich zwischen CUDA und HIP}
+    \caption{N-Body: Leistungsvergleich zwischen CUDA und HIP (Peak bei \num{1967.5} (ohne FMA) bzw. \num{3935} GFLOPS)}
     \label{nvidia:nbody:comparisonhip}
 \end{figure}
 
@@ -1062,8 +1060,8 @@ Ergebnisse erklärt.
             width = 0.75\textwidth,
             scale only axis,
             ymin = 0, ymax = 4000,
-            extra y ticks = 3935,
-            extra y tick labels = {\num{3935}},
+            extra y ticks = {1967.5, 3935},
+            extra y tick labels = {},
             extra y tick style={grid=major, major grid style={solid,thick,draw=red}},
             scaled y ticks = false,
             ylabel near ticks,
@@ -1078,7 +1076,7 @@ Ergebnisse erklärt.
             \addlegendentry{SYCL} 
         \end{axis}
     \end{tikzpicture}
-    \caption{N-Body: Leistungsvergleich zwischen CUDA (mit Q\_rsqrt) und SYCL}
+    \caption{N-Body: Leistungsvergleich zwischen CUDA (mit Q\_rsqrt) und SYCL (Peak bei \num{1967.5} (ohne FMA) bzw. \num{3935} GFLOPS)}
     \label{nvidia:nbody:comparisonsycl}
 \end{figure}
 

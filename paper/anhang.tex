@@ -717,7 +717,7 @@ auto force_calculation(sycl::nd_item<1> my_item, float4 body_pos,
             \addlegendentry{$\text{Blockgröße} = 1024$} 
         \end{axis}
     \end{tikzpicture}
-    \caption{zcopy: Bandbreite der Vega 64 (Lesen und Schreiben, HIP)}
+    \caption{zcopy: Bandbreite der Vega 64 ($n = 268435456$, Lesen und Schreiben, HIP)}
 \end{figure}
 
 \begin{figure}[H]
@@ -770,7 +770,7 @@ auto force_calculation(sycl::nd_item<1> my_item, float4 body_pos,
             \addlegendentry{$\text{Blockgröße} = 1024$} 
         \end{axis}
     \end{tikzpicture}
-    \caption{zcopy: Bandbreite der Vega 64 (Schreiben, HIP)}
+    \caption{zcopy: Bandbreite der Vega 64 ($n = 268435456$, Schreiben, HIP)}
 \end{figure}
 
 \subsection{HIP-zcopy (NVIDIA)}
@@ -780,7 +780,7 @@ auto force_calculation(sycl::nd_item<1> my_item, float4 body_pos,
     \centering
     \begin{tikzpicture}
         \begin{axis}[
-            title = {K20x -- zcopy -- Lesen + Schreiben -- generisch -- HIP},
+            title = {K20x -- zcopy -- Lesen + Schreiben -- $2^x$ -- HIP},
             xlabel = {Blöcke pro Multiprozessor},
             ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
             xmode = log,
@@ -827,14 +827,14 @@ auto force_calculation(sycl::nd_item<1> my_item, float4 body_pos,
             \addlegendentry{$\text{Blockgröße} = 1024$} 
         \end{axis}
     \end{tikzpicture}
-    \caption{zcopy: K20x-Bandbreite für generische Blöcke (Lesen und Schreiben, HIP)}
+    \caption{zcopy: K20x-Bandbreite für Zweierpotenzen ($n = 117440512$, Lesen und Schreiben, HIP)}
 \end{figure}
 
 \begin{figure}[H]
     \centering
     \begin{tikzpicture}
         \begin{axis}[
-            title = {K20x -- zcopy -- Schreiben -- generisch -- HIP},
+            title = {K20x -- zcopy -- Schreiben -- $2^x$ -- HIP},
             xlabel = {Blöcke pro Multiprozessor},
             ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
             xmode = log,
@@ -881,14 +881,14 @@ auto force_calculation(sycl::nd_item<1> my_item, float4 body_pos,
             \addlegendentry{$\text{Blockgröße} = 1024$} 
         \end{axis}
     \end{tikzpicture}
-    \caption{zcopy: K20x-Bandbreite für generische Blöcke (Schreiben, HIP)}
+    \caption{zcopy: K20x-Bandbreite für Zweierpotenzen ($n = 117440512$, Schreiben, HIP)}
 \end{figure}
 
 \begin{figure}[H]
     \centering
     \begin{tikzpicture}
         \begin{axis}[
-            title = {K20x -- zcopy -- Lesen + Schreiben -- optimiert -- HIP},
+            title = {K20x -- zcopy -- Lesen + Schreiben -- $192 \cdot 2^x$ -- HIP},
             xlabel = {Blöcke pro Multiprozessor},
             ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
             xmode = log,
@@ -925,14 +925,14 @@ auto force_calculation(sycl::nd_item<1> my_item, float4 body_pos,
             \addlegendentry{$\text{Blockgröße} = 768$} 
         \end{axis}
     \end{tikzpicture}
-    \caption{zcopy: K20x-Bandbreite für optimierte Blöcke (Lesen und Schreiben, HIP)}
+    \caption{zcopy: K20x-Bandbreite für 192er-Vielfache ($n = 88080384$, Lesen und Schreiben, HIP)}
 \end{figure}
 
 \begin{figure}[H]
     \centering
     \begin{tikzpicture}
         \begin{axis}[
-            title = {K20x -- zcopy -- Schreiben -- optimiert -- HIP},
+            title = {K20x -- zcopy -- Schreiben -- $192 \cdot 2^x$ -- HIP},
             xlabel = {Blöcke pro Multiprozessor},
             ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
             xmode = log,
@@ -969,14 +969,14 @@ auto force_calculation(sycl::nd_item<1> my_item, float4 body_pos,
             \addlegendentry{$\text{Blockgröße} = 768$} 
         \end{axis}
     \end{tikzpicture}
-    \caption{zcopy: K20x-Bandbreite für optimierte Blöcke (Schreiben, HIP)}
+    \caption{zcopy: K20x-Bandbreite für 192er-Vielfache ($n = 88080384$, Schreiben, HIP)}
 \end{figure}
 
 \begin{figure}[H]
     \centering
     \begin{tikzpicture}
         \begin{axis}[
-            title = {K20x -- zcopy -- Schreiben -- generisch und optimiert -- HIP},
+            title = {K20x -- zcopy -- Schreiben -- HIP},
             xlabel = {Blöcke pro Multiprozessor},
             ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
             xmode = log,
@@ -1008,7 +1008,7 @@ auto force_calculation(sycl::nd_item<1> my_item, float4 body_pos,
             \addlegendentry{$\text{Blockgröße} = 1024$} 
         \end{axis}
     \end{tikzpicture}
-    \caption{zcopy: K20x-Bandbreite für generische und optimierte Blöcke (Schreiben,
+    \caption{zcopy: K20x-Bandbreite für Zweierpotenzen ($n = 117440512$) und 192er-Vielfache ($n = 88080384$, Schreiben,
              HIP)}
 \end{figure}
 
@@ -1016,7 +1016,7 @@ auto force_calculation(sycl::nd_item<1> my_item, float4 body_pos,
     \centering
     \begin{tikzpicture}
         \begin{axis}[
-            title = {K20x -- zcopy -- optimiert -- HIP},
+            title = {K20x -- zcopy -- HIP},
             xlabel = {Blöcke pro Multiprozessor},
             ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
             xmode = log,
@@ -1048,7 +1048,7 @@ auto force_calculation(sycl::nd_item<1> my_item, float4 body_pos,
             \addlegendentry{Schreiben} 
         \end{axis}
     \end{tikzpicture}
-    \caption{zcopy: K20x-Bandbreite für 768er-Blöcke (HIP)}
+    \caption{zcopy: K20x-Bandbreite für 768er-Blöcke ($n = 88080384$, HIP)}
 \end{figure}
 
 \subsection{SYCL-zcopy}
@@ -1058,7 +1058,7 @@ auto force_calculation(sycl::nd_item<1> my_item, float4 body_pos,
     \centering
     \begin{tikzpicture}
         \begin{axis}[
-            title = {K20x -- zcopy -- Lesen + Schreiben -- generisch -- SYCL},
+            title = {K20x -- zcopy -- Lesen + Schreiben -- $2^x$ -- SYCL},
             xlabel = {Groups pro Multiprozessor},
             ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
             xmode = log,
@@ -1105,14 +1105,14 @@ auto force_calculation(sycl::nd_item<1> my_item, float4 body_pos,
             \addlegendentry{$\text{Group-Größe} = 1024$} 
         \end{axis}
     \end{tikzpicture}
-    \caption{zcopy: K20x-Bandbreite für generische Groups (Lesen und Schreiben, SYCL)}
+    \caption{zcopy: K20x-Bandbreite für Zweierpotenzen ($n = 117440512$, Lesen und Schreiben, SYCL)}
 \end{figure}
 
 \begin{figure}[H]
     \centering
     \begin{tikzpicture}
         \begin{axis}[
-            title = {K20x -- zcopy -- Schreiben -- generisch -- SYCL},
+            title = {K20x -- zcopy -- Schreiben -- $2^x$ -- SYCL},
             xlabel = {Groups pro Multiprozessor},
             ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
             xmode = log,
@@ -1159,14 +1159,14 @@ auto force_calculation(sycl::nd_item<1> my_item, float4 body_pos,
             \addlegendentry{$\text{Group-Größe} = 1024$} 
         \end{axis}
     \end{tikzpicture}
-    \caption{zcopy: K20x-Bandbreite für generische Groups (Schreiben, SYCL)}
+    \caption{zcopy: K20x-Bandbreite für Zweierpotenzen ($n = 117440512$, Schreiben, SYCL)}
 \end{figure}
 
 \begin{figure}[H]
     \centering
     \begin{tikzpicture}
         \begin{axis}[
-            title = {K20x -- zcopy -- Lesen + Schreiben -- optimiert -- SYCL},
+            title = {K20x -- zcopy -- Lesen + Schreiben -- $192 \cdot 2^x$ -- SYCL},
             xlabel = {Groups pro Multiprozessor},
             ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
             xmode = log,
@@ -1203,14 +1203,14 @@ auto force_calculation(sycl::nd_item<1> my_item, float4 body_pos,
             \addlegendentry{$\text{Group-Größe} = 768$} 
         \end{axis}
     \end{tikzpicture}
-    \caption{zcopy: K20x-Bandbreite für optimierte Groups (Lesen und Schreiben, SYCL)}
+    \caption{zcopy: K20x-Bandbreite für 192er-Vielfache ($n = 88080384$, Lesen und Schreiben, SYCL)}
 \end{figure}
 
 \begin{figure}[H]
     \centering
     \begin{tikzpicture}
         \begin{axis}[
-            title = {K20x -- zcopy -- Schreiben -- optimiert -- SYCL},
+            title = {K20x -- zcopy -- Schreiben -- $192 \cdot 2^x$ -- SYCL},
             xlabel = {Groups pro Multiprozessor},
             ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
             xmode = log,
@@ -1247,14 +1247,14 @@ auto force_calculation(sycl::nd_item<1> my_item, float4 body_pos,
             \addlegendentry{$\text{Group-Größe} = 768$} 
         \end{axis}
     \end{tikzpicture}
-    \caption{zcopy: K20x-Bandbreite für optimierte Groups (Schreiben, SYCL)}
+    \caption{zcopy: K20x-Bandbreite für 192er-Vielfache ($n = 88080384$, Schreiben, SYCL)}
 \end{figure}
 
 \begin{figure}[H]
     \centering
     \begin{tikzpicture}
         \begin{axis}[
-            title = {K20x -- zcopy -- Schreiben -- generisch und optimiert -- SYCL},
+            title = {K20x -- zcopy -- Schreiben -- SYCL},
             xlabel = {Groups pro Multiprozessor},
             ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
             xmode = log,
@@ -1286,7 +1286,7 @@ auto force_calculation(sycl::nd_item<1> my_item, float4 body_pos,
             \addlegendentry{$\text{Group-Größe} = 1024$} 
         \end{axis}
     \end{tikzpicture}
-    \caption{zcopy: K20x-Bandbreite für generische und optimierte Groups (Schreiben,
+    \caption{zcopy: K20x-Bandbreite für Zweierpotenzen ($n = 117440512$) und 192er-Vielfache ($n = 88080384$, Schreiben,
              SYCL)}
 \end{figure}
 
@@ -1294,7 +1294,7 @@ auto force_calculation(sycl::nd_item<1> my_item, float4 body_pos,
     \centering
     \begin{tikzpicture}
         \begin{axis}[
-            title = {K20x -- zcopy -- optimiert -- SYCL},
+            title = {K20x -- zcopy -- SYCL},
             xlabel = {Groups pro Multiprozessor},
             ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
             xmode = log,
@@ -1326,7 +1326,7 @@ auto force_calculation(sycl::nd_item<1> my_item, float4 body_pos,
             \addlegendentry{Schreiben} 
         \end{axis}
     \end{tikzpicture}
-    \caption{zcopy: K20x-Bandbreite für 768er-Groups (SYCL)}
+    \caption{zcopy: K20x-Bandbreite für 768er-Groups ($n = 88080384$, SYCL)}
 \end{figure}
 
 \subsection{HIP-Reduction (AMD)}

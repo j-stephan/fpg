@@ -30,7 +30,7 @@ folgenden Hardware gemessen:
 
 Das verwendete Betriebssystem war Ubuntu 16.04 mit der Linux-Kernel-Version
 4.15. Für die \gls{gpgpu}-Programmierung kamen die mit der \gls{rocm}-Version
-2.1.96 mitgelieferten HIP- und HC-Implementierungen zum Einsatz.
+2.1.96 mitgelieferten Implementierungen von \gls{hip} und \gls{hc} zum Einsatz.
 
 \subsection{zcopy}
 
@@ -157,7 +157,7 @@ angehängt.
             \addlegendentry{$\text{Tile-Größe} = 1024$} 
         \end{axis}
     \end{tikzpicture}
-    \caption{zcopy: Bandbreite der Vega 64 (Lesen und Schreiben, HC)}
+    \caption{zcopy: Bandbreite der Vega 64 ($n = 268435456$, Lesen und Schreiben, HC)}
     \label{amd:zcopy:rw}
 \end{figure}
 
@@ -211,7 +211,7 @@ angehängt.
             \addlegendentry{$\text{Tile-Größe} = 1024$} 
         \end{axis}
     \end{tikzpicture}
-    \caption{zcopy: Bandbreite der Vega 64 (Schreiben, HC)}
+    \caption{zcopy: Bandbreite der Vega 64 ($n = 268435456$, Schreiben, HC)}
     \label{amd:zcopy:w}
 \end{figure}
 
@@ -256,7 +256,7 @@ Schreibvorgang der Fall, wie die Abbildungen~\ref{amd:zcopy:vergleichrw} und
             \addlegendentry{HIP} 
         \end{axis}
     \end{tikzpicture}
-    \caption{zcopy: Bandbreite der Vega 64 (256er-Blöcke, Lesen+Schreiben)}
+    \caption{zcopy: Bandbreite der Vega 64 ($n = 268435456$, 256er-Blöcke, Lesen+Schreiben)}
     \label{amd:zcopy:vergleichrw}
 \end{figure}
 
@@ -295,7 +295,7 @@ Schreibvorgang der Fall, wie die Abbildungen~\ref{amd:zcopy:vergleichrw} und
             \addlegendentry{HIP} 
         \end{axis}
     \end{tikzpicture}
-    \caption{zcopy: Bandbreite der Vega 64 (256er-Blöcke, Schreiben)}
+    \caption{zcopy: Bandbreite der Vega 64 ($n = 268435456$, 256er-Blöcke, Schreiben)}
     \label{amd:zcopy:vergleichw}
 \end{figure}
 
@@ -344,7 +344,7 @@ theoretisch möglichen Bandbreite auch praktisch nutzen.
             \addlegendentry{Peak}
         \end{axis}
     \end{tikzpicture}
-    \caption{zcopy: Theoretische und praktische Bandbreite der Vega 64 (HC,
+    \caption{zcopy: Theoretische und praktische Bandbreite der Vega 64 ($n = 268435456$, HC,
              256er-Tiles)}
     \label{amd:zcopy:peak}
 \end{figure}
@@ -478,9 +478,9 @@ tatsächlich erreichbare Bandbreite heran, die im zcopy-Benchmark ermittelt wurd
 
 \subsubsection{Implementierung}
 
-Die Implementierung für \gls{hc} und \gls{hip} folgen denselben Prinzipien, die
-für die NVIDIA-Implementierungen in Abschnitt~\ref{nvidia:nbody:implementierung}
-aufgeführt wurden.
+Die Implementierungen in \gls{hc} und \gls{hip} folgen denselben Prinzipien, die
+für die Implementierungen für NVIDIA-GPUs in 
+Abschnitt~\ref{nvidia:nbody:implementierung} aufgeführt wurden.
 
 \subsubsection{Messmethoden}
 
@@ -618,7 +618,7 @@ identisches Ergebnis zu erzeugen (siehe Quelltexte~\ref{amd:nbody:isahc} und
             width = 0.75\textwidth,
             scale only axis,
             ymin = 0, ymax = 13000,
-            extra y ticks = 12583,
+            extra y ticks = {6291.5, 12583},
             extra y tick labels = {},
             extra y tick style={grid=major, major grid style={solid,thick,draw=red}},
             scaled y ticks = false,
@@ -632,12 +632,9 @@ identisches Ergebnis zu erzeugen (siehe Quelltexte~\ref{amd:nbody:isahc} und
             \addplot table [x = n, y = gflops-hip, col sep = semicolon]
                            {data/nbody-amd.csv};
             \addlegendentry{HIP} 
-
-            \addlegendimage{peak}
-            \addlegendentry{Max.}
         \end{axis}
     \end{tikzpicture}
-    \caption{N-Body: Leistungsvergleich zwischen HC und HIP}
+    \caption{N-Body: Leistungsvergleich zwischen HC und HIP (Peak bei \num{6291.5} (ohne FMA) bzw. \num{12583} GFLOPS)}
     \label{amd:nbody:comparison}
 \end{figure}
 
@@ -704,6 +701,3 @@ v_fma_f32 v16, v16, v17, v13
         \label{amd:nbody:isahip}
     \end{minipage}
 \end{figure}
-
-Beide \gls{api}s erreichen jedoch nicht einmal die Hälfte der theoretisch
-möglichen FLOPS.
