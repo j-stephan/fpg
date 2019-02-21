@@ -205,13 +205,11 @@ werden in den nächsten Abschnitten ausführlich erklärt.
 \begin{code}
     \begin{minted}[breaklines,breakafter=\,,escapeinside=||,fontsize=\small]{cuda}
 __device__ int foo() { /* ... */ }
-
 __global__ void vec_add(const float* a, const float* b, float* c,
                         std::size_t dim)
 {
     auto i = blockIdx.x * blockDim.x + threadIdx.x;
-    if(i < dim)
-        return;
+    if(i < dim) return;
 
     auto k = foo();
     c[i] = a[i] + b[i] + k;
@@ -229,7 +227,12 @@ vec_add<<<block_num, thread_num>>>(dev_a, dev_b, dev_c, dim);
 Ein \textit{thread} ist die kleinste selbstständige Einheit, die eine Aufgabe
 ausführen kann und direkt auf einen Hardware-Thread eines Multiprozessors
 abbildbar. \textit{Threads} sind auf der Hardware-Ebene in \textit{warps}
-(Gruppen aus 32 Threads) zusammengefasst, die synchron die selben Instruktionen
+ -- bestehend aus 32 \textit{threads} -- zusammengefasst, die
+ synchron\footnote{Die neuen
+Architekturen seit Volta können mit weniger als 32 \textit{threads} besser
+umgehen als die Vorgängerarchitekturen. Möglich wird dies durch ein Verfahren
+namens \textit{independent thread scheduling}, das diese Hardware-Limitierung
+teilweise aufhebt.} auch unterhalb dieser Grenze dieselben Instruktionen
 ausführen. \textit{Warps} entsprechen damit Registern der CPU, die das Modell
 \gls{simd} unterstützen, sind im Vergleich zu diesen allerdings flexibler
 programmierbar. Dieses Hardware-Modell wird von NVIDIA auch als \gls{simt}
@@ -595,8 +598,7 @@ __global__ void vec_add(const float* a, const float* b, float* c,
                         std::size_t dim)
 {
     auto i = |\textcolor{keyword-green}{hipBlockIdx\_x}| * |\textcolor{keyword-green}{hipBlockDim\_x}| + |\textcolor{keyword-green}{hipThreadIdx\_x}|;
-    if(i < dim)
-        return;
+    if(i < dim) return;
 
     auto k = foo();
     c[i] = a[i] + b[i] + k;
@@ -681,8 +683,7 @@ void vec_add [[hc]] (hc::tiled_index<1> idx,
                      hc::array_view<float> c, std::size_t dim)
 {
     auto i = idx.global[0];
-    if(i < dim)
-        return;
+    if(i < dim) return;
 
     auto k = foo();
     c[i] = a[i] + b[i] + k;
@@ -1073,8 +1074,7 @@ struct vec_adder
     void operator()(cl::sycl::nd_item<1> my_item)
     {
         auto i = my_item.get_global_id(0);
-        if(i >= dim)
-            return;
+        if(i >= dim) return;
 
         auto k = foo();
         c[i] = a[i] + b[i] + k;
@@ -1143,7 +1143,7 @@ Spracherweiterungen im Nachteil ist.
 
 Die von der SYCL-Spezifikation vorgesehene Datenbewegung ist grundsätzlich
 \textit{implizit}. Dabei kommt ein zweistufiges System zum Einsatz. Zunächst
-wird der zu verarbeitende Speicherbereich des Hosts einem \textit{buffer}
+wird der zu bearbeitende Speicherbereich des Hosts einem \textit{buffer}
 zugeordnet. Der \textit{buffer} übernimmt während seiner Lebensdauer die
 Kontrolle über besagten Host-Speicher und reserviert einen entsprechenden
 Bereich auf dem Device (bzw. den Devices, siehe Affinitäts-Abschnitt). Der
@@ -1299,7 +1299,7 @@ Devices sichtbar. Um die Synchronisierung zwischen Devices (möglicherweise von
 verschiedenen Herstellern) zu gewährleisten, kapseln diese Objekte unter
 Umständen mehrere Speicherreservierungen auf dem Host und den Devices.
 Eventuelle Abhängigkeiten zwischen Device-Zugriffen werden von der
-SYCL-Laufzeitumgebung erkannt und im Hintergrund synchronisiert. Bei einer
+Laufzeitumgebung erkannt und im Hintergrund synchronisiert. Bei einer
 parallelen Verarbeitung des selben Objekts durch mehrere Devices kann der
 Programmierer explizit einen atomaren Zugriff definieren.
 (vgl.~\cite{syclspec}, S.\ 24)
