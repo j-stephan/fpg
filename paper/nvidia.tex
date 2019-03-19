@@ -1,0 +1,1149 @@
+\section{Messungen auf NVIDIA-GPUs}
+\label{nvidia}
+
+\subsection{Verwendete Hard- und Software}
+
+Die hier gezeigten Benchmark-Ergebnisse wurden auf einem Knoten der
+\texttt{gpu2}-Partition des \gls{hpc}-Systems Taurus gemessen, der über zwei
+GPUs des Modells Tesla K20x (mit aktiviertem ECC) verfügt.
+
+Die Messungen fanden innerhalb der SCS5-Umgebung statt, in der die folgende
+Software verwendet wurde:
+
+\begin{itemize}
+    \item \texttt{CUDA/10.0.130} (Modulsystem)
+    \item \texttt{GCC/7.3.0-2.30} (Modulsystem)
+    \item \gls{hip} (Version 1.5.19061, ROCm-GitHub-Repository)
+    \item ComputeCpp (Codeplays SYCL-Implementierung, Version 1.0.5 für Ubuntu
+          14.04)
+\end{itemize}
+
+\subsection{zcopy}
+
+\subsubsection{Vorüberlegungen}
+\label{nvidia:zcopy:vorueberlegungen}
+
+Um eine optimale Ausnutzung der Speicherbandbreite zu erreichen, ist ein genauer
+Blick auf die verwendete Architektur erforderlich. Die K20x-GPUs verfügen auf
+jedem Multiprozessor bei einfacher Genauigkeit über \num{192} Hardware-Threads.
+Ein Multiprozessor kann somit sechs \textit{Warps} parallel ausführen. Ein
+häufiges Muster der CUDA-Programmierung ist die Verwendung von Blockgrößen, die
+eine Zweierpotenz darstellen. Aus diesem Grund werden auf Blockgrößen
+untersucht, die ein Vielfaches von \num{64} sind (bis \num{1024}). Zusätzlich
+werden auf der K20x Blockgrößen betrachtet, die ein Vielfaches von \num{192}
+sind (bis \num{768}), um eventuelle Effekte zu entdecken.
+
+Die K20x-GPU besitzt eine L1-Cacheline-Größe von \num{128} Byte
+(vgl.~\cite{pascalguide}, Abschnitt 1.4.3.2). Sofern alle Threads eines
+\textit{Warps} benachbarte \num{4}-Byte-Sequenzen laden, lassen sich diese
+Zugriffe in einer einzigen Cacheline vereinen, was die pro Thread verwendete
+Speicherbandbreite drastisch reduziert und eine insgesamt höhere Auslastung
+erlaubt.
+
+Um eine höhere Auslastung des Speicher-Controllers zu erreichen und die Anzahl
+der notwendigen Schleifendurchläufe innerhalb des Kernels zu verringern, wodurch
+sich die Zahl abhängiger Instruktionen verringert, werden die \num{4} Byte pro
+Thread in diesem Benchmark vervierfacht. Jeder Thread lädt also \num{16} Byte in
+Form eines Elements vom Typ \texttt{float4}. Die Anhang befindlichen
+Quelltexte~\ref{anhang:cuda:zcopy} (CUDA), \ref{anhang:hip:zcopy} (\gls{hip})
+und \ref{anhang:sycl:zcopy} (SYCL) zeigen die Kernel-Implementierungen der
+verschiedenen Spracherweiterungen.
+
+\subsubsection{Messmethoden}
+\label{nvidia:zcopy:methoden}
+
+Der Speicher der GPU wurde zunächst mit zwei gleich großen Datenfeldern $A$ und
+$B$ befüllt, die jeweils etwas weniger als die Hälfte des GPU-Speichers
+einnahmen und $n$ \texttt{float4}-Elemente umfassten. Diese wurden mit Nullen
+($A$) bzw.\ \textit{NaN} ($B$) initialisiert. Anschließend wurden die Kernel für
+jede Block-Größe jeweils zehn Mal ausgeführt, wobei für jeden Kernel-Durchlauf
+die benötigte Zeit über die Event-Funktionalitäten der verschiedenen
+Spracherweiterungen gemessen wurde. Der minimale Zeitbedarf $t_{\text{min}}$
+(in \si{\second}) jedes Kernels wird als Grundlage für die Berechnung der
+Bandbreite $B$ (in \si{\gibi\byte\per\second}) genommen:
+
+\[
+    B = \frac{k \cdot \text{sizeof(\texttt{float4})} \cdot n}{t_\text{min}},
+\]
+
+wobei der Faktor $k$ die Werte $2 \cdot 10^{-9}$ (kombinierter Lese- und
+Schreibzugriff) oder $1 \cdot 10^{-9}$ (Schreibzugriff) annehmen kann.
+
+Der Quelltext~\ref{nvidia:zcopy:befehle} zeigt die verwendeten Compiler-Flags.
+
+\begin{code}
+    \begin{minted}[fontsize=\small]{bash}
+# CUDA-Compiler
+nvcc -std=c++14 -O3 -gencode arch=compute_35,code=sm_35
+
+# HIP-Compiler
+hipcc -O3 -std=c++14 -gencode arch=compute_35,code=sm_35
+
+# SYCL-Compiler
+compute++ -std=c++17 -O3 -sycl-driver -sycl-target ptx64
+    \end{minted}
+    \caption{Compiler-Flags für zcopy}
+    \label{nvidia:zcopy:befehle}
+\end{code}
+
+\subsubsection{Ergebnisse}
+
+Ein Blick auf die mit CUDA ermittelten Ergebnisse zeigt, dass die K20x-GPU bei
+Speicherzugriffen von größeren Thread-Blöcken als auch von vielen Thread-Blöcken
+profitiert. Dies gilt sowohl für die \glqq generischen\grqq\ Blockgrößen, die
+ein Vielfaches von \num{64} darstellen (siehe die
+Abbildungen~\ref{nvidia:zcopy:k20xgenerischrw} und
+\ref{nvidia:zcopy:k20xgenerischw}), als auch die auf die Kepler-Architektur
+angepassten Blockgrößen (siehe die
+Abbildungen~\ref{nvidia:zcopy:k20xangepasstrw} und
+\ref{nvidia:zcopy:k20xangepasstw}). Außerdem bestätigt sich die Annahme, dass
+mit der angepassten Blockgröße eine etwas bessere Bandbreite erzielt werden kann
+(siehe Abbildung~\ref{nvidia:zcopy:k20xvergleich}). Dies hilft insbesondere dem
+kombinierten Lese- und Schreibvorgang, der dadurch bei einer großen Blockzahl
+nahezu die selbe Bandbreite wie der reine Schreibvorgang erreicht (siehe
+Abbildung~\ref{nvidia:zcopy:k20xrwwo}).
+
+\begin{figure}
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {K20x -- zcopy -- Lesen + Schreiben -- $2^x$ -- CUDA},
+            xlabel = {Blöcke pro Multiprozessor},
+            ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
+            xmode = log,
+            log basis x = 2,
+            xmin = 1, xmax = 8192,
+            ymin = 40, ymax = 190,
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = south east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            width = 0.75\textwidth,
+            scale only axis,
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = blocks_per_sm, y = throughput-64,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-cuda-k20x-generic-rw.csv};
+            \addlegendentry{$\text{Blockgröße} = 64$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-128,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-cuda-k20x-generic-rw.csv};
+            \addlegendentry{$\text{Blockgröße} = 128$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-256,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-cuda-k20x-generic-rw.csv};
+            \addlegendentry{$\text{Blockgröße} = 256$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-512,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-cuda-k20x-generic-rw.csv};
+            \addlegendentry{$\text{Blockgröße} = 512$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-1024,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-cuda-k20x-generic-rw.csv};
+            \addlegendentry{$\text{Blockgröße} = 1024$} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{zcopy: K20x-Bandbreite für Zweierpotenzen ($n = 117440512$, Lesen und Schreiben, CUDA)}
+    \label{nvidia:zcopy:k20xgenerischrw}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {K20x -- zcopy -- Schreiben -- $2^x$ -- CUDA},
+            xlabel = {Blöcke pro Multiprozessor},
+            ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
+            xmode = log,
+            log basis x = 2,
+            xmin = 1, xmax = 8192,
+            ymin = 70, ymax = 190,
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = south east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            width = 0.75\textwidth,
+            scale only axis,
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = blocks_per_sm, y = throughput-64,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-cuda-k20x-generic-w.csv};
+            \addlegendentry{$\text{Blockgröße} = 64$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-128,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-cuda-k20x-generic-w.csv};
+            \addlegendentry{$\text{Blockgröße} = 128$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-256,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-cuda-k20x-generic-w.csv};
+            \addlegendentry{$\text{Blockgröße} = 256$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-512,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-cuda-k20x-generic-w.csv};
+            \addlegendentry{$\text{Blockgröße} = 512$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-1024,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-cuda-k20x-generic-w.csv};
+            \addlegendentry{$\text{Blockgröße} = 1024$} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{zcopy: K20x-Bandbreite für Zweierpotenzen ($n = 117440512$, Schreiben, CUDA)}
+    \label{nvidia:zcopy:k20xgenerischw}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {K20x -- zcopy -- Lesen + Schreiben -- $192 \cdot 2^x$ -- CUDA},
+            xlabel = {Blöcke pro Multiprozessor},
+            ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
+            xmode = log,
+            log basis x = 2,
+            xmin = 1, xmax = 8192,
+            ymin = 40, ymax = 190,
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = south east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            width = 0.75\textwidth,
+            scale only axis,
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = blocks_per_sm, y = throughput-192,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-cuda-k20x-optimized-rw.csv};
+            \addlegendentry{$\text{Blockgröße} = 192$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-384,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-cuda-k20x-optimized-rw.csv};
+            \addlegendentry{$\text{Blockgröße} = 384$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-768,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-cuda-k20x-optimized-rw.csv};
+            \addlegendentry{$\text{Blockgröße} = 768$} 
+
+        \end{axis}
+    \end{tikzpicture}
+    \caption{zcopy: K20x-Bandbreite für 192er-Vielfache ($n = 88080384$, Lesen und Schreiben, CUDA)}
+    \label{nvidia:zcopy:k20xangepasstrw}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {K20x -- zcopy -- Schreiben -- $192 \cdot 2^x$ -- CUDA},
+            xlabel = {Blöcke pro Multiprozessor},
+            ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
+            xmode = log,
+            log basis x = 2,
+            xmin = 1, xmax = 8192,
+            ymin = 70, ymax = 190,
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = south east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            width = 0.75\textwidth,
+            scale only axis,
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = blocks_per_sm, y = throughput-192,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-cuda-k20x-optimized-w.csv};
+            \addlegendentry{$\text{Blockgröße} = 192$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-384,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-cuda-k20x-optimized-w.csv};
+            \addlegendentry{$\text{Blockgröße} = 384$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-768,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-cuda-k20x-optimized-w.csv};
+            \addlegendentry{$\text{Blockgröße} = 768$} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{zcopy: K20x-Bandbreite für 192er-Vielfache ($n = 88080384$, Schreiben, CUDA)}
+    \label{nvidia:zcopy:k20xangepasstw}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {K20x -- zcopy -- Schreiben -- CUDA},
+            xlabel = {Blöcke pro Multiprozessor},
+            ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
+            xmode = log,
+            log basis x = 2,
+            xmin = 1, xmax = 8192,
+            ymin = 175, ymax = 188,
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = south east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            width = 0.75\textwidth,
+            scale only axis,
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = blocks_per_sm, y = throughput-768,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-cuda-k20x-optimized-w.csv};
+            \addlegendentry{$\text{Blockgröße} = 768$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-1024,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-cuda-k20x-generic-w.csv};
+            \addlegendentry{$\text{Blockgröße} = 1024$} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{zcopy: K20x-Bandbreite für Zweierpotenz- ($n = 117440512$) und
+             192er-Größen ($n = 88080384$, Schreiben, CUDA)}
+    \label{nvidia:zcopy:k20xvergleich}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {K20x -- zcopy -- CUDA},
+            xlabel = {Blöcke pro Multiprozessor},
+            ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
+            xmode = log,
+            log basis x = 2,
+            xmin = 1, xmax = 8192,
+            % ymin = 175, ymax = 188,
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = south east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            width = 0.75\textwidth,
+            scale only axis,
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = blocks_per_sm, y = throughput-768,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-cuda-k20x-optimized-rw.csv};
+            \addlegendentry{Lesen + Schreiben} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-768,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-cuda-k20x-optimized-w.csv};
+            \addlegendentry{Schreiben} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{zcopy: K20x-Bandbreite für 768er-Blöcke ($n = 88080384$, CUDA)}
+    \label{nvidia:zcopy:k20xrwwo}
+\end{figure}
+
+Die mit \gls{hip} und SYCL ermittelten Ergebnisse zeigen ein ähnliches Bild
+(siehe die angehängten Abbildungen in den
+Abschnitten~\ref{anhang:hip:nvzcopyfig} (\gls{hip}) und
+\ref{anhang:sycl:zcopyfig} (SYCL)).
+
+Hinsichtlich der erreichten Speicherbandbreite bestehen zwischen den
+Spracherweiterungen keine nennenswerten Unterschiede, wie die
+Abbildung~\ref{nvidia:zcopy:k20xexts} zeigt.
+
+\begin{figure}
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {K20x -- zcopy -- Schreiben},
+            xlabel = {Blöcke pro Multiprozessor},
+            ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
+            xmode = log,
+            log basis x = 2,
+            xmin = 1, xmax = 8192,
+            ymin = 175, ymax = 190,
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = south east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            width = 0.75\textwidth,
+            scale only axis,
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = blocks_per_sm, y = throughput-768,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-cuda-k20x-optimized-w.csv};
+            \addlegendentry{CUDA} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-768,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-hip-k20x-optimized-w.csv};
+            \addlegendentry{HIP} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-768,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-sycl-k20x-optimized-w.csv};
+            \addlegendentry{SYCL} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{zcopy: K20x-Bandbreite für 768er-Blöcke ($n = 88080384$, Schreiben)}
+    \label{nvidia:zcopy:k20xexts}
+\end{figure}
+
+Die K20x-GPU erreicht etwa 75\% der theoretisch möglichen Bandbreite (siehe
+Abbildung~\ref{nvidia:zcopy:k20xmax}). Dies ist durch das aktivierte ECC
+(vgl.~\cite{bestpractices}, Abschnitt 8.2.1) und eventuell vorhandene
+Ungenauigkeiten der Event-Systeme der Spracherweiterungen zu
+erklären\footnote{Der Einsatz geeigneter Profiler könnte aufgrund der besseren
+Zeitauflösung noch kleinere Änderungen der Ergebnisse bewirken. Da es aber für
+SYCL derzeit keine Profiler gibt, die auf NVIDIA-Hardware messen können, wurde
+an dieser Stelle darauf verzichtet.}. Für den Reduction-Benchmark wird daher
+eine tatsächlich erreichbare Obergrenze von \SI{188}{\gibi\byte\per\second}
+angenommen.
+
+\begin{figure}
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {K20x -- zcopy -- Peak},
+            xlabel = {Blöcke pro Multiprozessor},
+            ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
+            xmode = log,
+            log basis x = 2,
+            xmin = 1, xmax = 8192,
+            ymin = 70, ymax = 260,
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = south east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            width = 0.75\textwidth,
+            scale only axis,
+            cycle list name = exotic,
+            extra y ticks = 249.6,
+            extra y tick labels = {$249.6$},
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = blocks_per_sm, y = throughput-768,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-cuda-k20x-optimized-rw.csv};
+            \addlegendentry{Lesen+Schreiben} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-768,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-cuda-k20x-optimized-w.csv};
+            \addlegendentry{Schreiben} 
+
+            \addplot table [x = blocks_per_sm, y = peak, col sep = semicolon]
+                           {data/zcopy-nvidia-k20x-peak.csv};
+            \addlegendentry{Peak}
+        \end{axis}
+    \end{tikzpicture}
+    \caption{zcopy: Theoretische und praktische K20x-Bandbreite für 768er-Blöcke ($n = 88080384$)}
+    \label{nvidia:zcopy:k20xmax}
+\end{figure}
+
+\subsection{Reduction}
+
+\subsubsection{Implementierung}
+
+Die Implementierungen des Reduktionskernels sind dieser Arbeit angehängt und
+befinden sich in den Quelltexten~\ref{anhang:cuda:reduction} (CUDA),
+\ref{anhang:hip:reduction} (\gls{hip}) und \ref{anhang:sycl:reduction} (SYCL).
+
+\subsubsection{Messmethoden}
+\label{nvidia:reduction:methoden}
+
+Zunächst wurde die zu reduzierende Array-Größe auf die größte in den
+GPU-Speicher passende Elementezahl festgesetzt. Durch das Ausprobieren mehrerer
+Block-Größen zwischen \num{64} und \num{1024} einerseits und der Variation der
+Block-Zahl pro Multiprozessor andererseits wurde dann eine optimierte
+Kernel-Konfiguration ermittelt.
+
+Im nächsten Schritt wurde die ermittelte optimierte Konfiguration auf Arrays
+verschiedener Größe ausprobiert, um das Skalierungsverhalten festzustellen.
+
+Jede für den beschriebenen Ablauf nötige Kernel-Ausführung erfolgte zehn Mal
+hintereinander. Für jede Ausführung wurde über die den Spracherweiterungen
+zugehörigen Events die Laufzeit ermittelt; die minimale Laufzeit diente als
+Grundlage für die Berechnung der Bandbreite.
+
+Die Compiler-Flags sind dieselben wie die für den zcopy-Benchmark in
+Abschnitt~\ref{nvidia:zcopy:methoden} aufgeführten.
+
+\subsubsection{Ergebnisse}
+
+Der Blick auf die Abbildung~\ref{nvidia:reduction:cuda} zeigt, dass \num{256},
+\num{512} und \num{1024} Threads die besten Block-Größen bilden. Die selben
+Ergebnisse zeigen sich für \gls{hip} (siehe
+Abbildung~\ref{anhang:nvidia:reduction:hip}) und SYCL (siehe
+Abbildung~\ref{anhang:nvidia:reduction:sycl}). Die SYCL-Variante zeigt zudem ein
+effizienteres Verhalten für Blöcke mit \num{128} Threads.  Da \num{256} Threads
+über alle Spracherweiterungen hinweg die beste Auswahl an
+Block-pro-Multiprozessor-Konfigurationen bieten, wurde im weiteren
+Benchmark-Verlauf diese Größe ausgewählt. Zwischen \num{8} und \num{1024}
+Blöcken pro Multiprozessor kommen für diese Größe verschiedene Konfigurationen
+in Frage, die sich für große Arrays nahezu gleichwertig verhalten. Da die
+nächste Benchmark-Stufe auch weitaus kleinere Arrays umfasst, wurde hier die
+kleinste sinnvolle Konfiguration gewählt: \num{8} Blöcke pro Multiprozessor. 
+
+Die zcopy-Ergebnisse können hier bestätigt werden: zwischen den Erweiterungen
+bestehen allenfalls marginale Bandbreitenunterschiede. Zudem kann die
+tatsächlich erreichbare Bandbreite, die im zcopy-Benchmark ermittelt wurde,
+auch bei der Reduktion nahezu erreicht werden (siehe
+Abbildung~\ref{nvidia:reduction:peak}).
+
+\begin{figure}
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {K20x -- Reduction -- CUDA},
+            xlabel = {Blöcke pro Multiprozessor},
+            ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
+            xmode = log,
+            log basis x = 2,
+            xmin = 2, xmax = 4096,
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = south east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            width = 0.75\textwidth,
+            scale only axis,
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = blocks, y = dim64,
+                            col sep = semicolon]
+                           {data/reduce-nvidia-cuda-k20x.csv};
+            \addlegendentry{Blockgröße = 64} 
+
+            \addplot table [x = blocks, y = dim128,
+                            col sep = semicolon]
+                           {data/reduce-nvidia-cuda-k20x.csv};
+            \addlegendentry{Blockgröße = 128} 
+
+            \addplot table [x = blocks, y = dim256,
+                            col sep = semicolon]
+                           {data/reduce-nvidia-cuda-k20x.csv};
+            \addlegendentry{Blockgröße = 256} 
+
+            \addplot table [x = blocks, y = dim512,
+                            col sep = semicolon]
+                           {data/reduce-nvidia-cuda-k20x.csv};
+            \addlegendentry{Blockgröße = 512} 
+
+            \addplot table [x = blocks, y = dim1024,
+                            col sep = semicolon]
+                           {data/reduce-nvidia-cuda-k20x.csv};
+            \addlegendentry{Blockgröße = 1024} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{Reduction: Bandbreite der K20x (CUDA)}
+    \label{nvidia:reduction:cuda}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {K20x -- Reduction},
+            xlabel = {$n$},
+            ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
+            xmode = log,
+            log basis x = 2,
+            xmin = 65536, xmax = 134217728,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = south east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            width = 0.75\textwidth,
+            scale only axis,
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = n, y = CUDA,
+                            col sep = semicolon]
+                           {data/reduce-nvidia-k20x.csv};
+            \addlegendentry{HC} 
+
+            \addplot table [x = n, y = HIP,
+                            col sep = semicolon]
+                           {data/reduce-nvidia-k20x.csv};
+            \addlegendentry{HIP} 
+
+            \addplot table [x = n, y = SYCL,
+                            col sep = semicolon]
+                           {data/reduce-nvidia-k20x.csv};
+            \addlegendentry{SYCL} 
+
+            \addplot table [x = , y = Peak, col sep = semicolon]
+                           {data/reduce-nvidia-k20x.csv};
+            \addlegendentry{Peak}
+        \end{axis}
+    \end{tikzpicture}
+    \caption{Reduction: Bandbreite der K20x (acht 256er-Blöcke pro
+             Multiprozessor)}
+    \label{nvidia:reduction:peak}
+\end{figure}
+
+\subsection{N-Body}
+
+\subsubsection{Implementierung}
+\label{nvidia:nbody:implementierung}
+
+Die theoretische Funktion~\ref{methoden:nbody:gpu:bodybodyinteraction}, die die
+Interaktion zwischen zwei Körpern berechnet, wurde in allen Spracherweiterungen
+umgesetzt. Durch den Einsatz von \gls{fma}-Operationen werden die benötigten
+\glspl{flop} für die Berechnung des Skalarprodukts sowie der Beschleunigung
+verringert. Die inverse Wurzel wird durch die \texttt{rsqrt}-Funktion berechnet.
+Die Quelltexte~\ref{anhang:cuda:bodybodyinteraction} (CUDA),
+\ref{anhang:hip:bodybodyinteraction} und \ref{anhang:sycl:bodybodyinteraction}
+(SYCL) im Anhang dieser Arbeit zeigen die konkrete Implementierung.
+
+Die theoretischen Funktionen~\ref{methoden:nbody:gpu:tilecalculation} und
+\ref{methoden:nbody:gpu:calcforces} wurden zusammengefasst, da erstere
+nur aus einer kurzen Schleife besteht. Überdies wurde der Compiler angewiesen,
+die Schleife auszurollen (siehe auch den nächsten Abschnitt). Diese
+Implementierungen finden sich in den angehängten
+Quelltexten~\ref{anhang:cuda:forcecalculation} (CUDA),
+\ref{anhang:hip:forcecalculation} (HIP) bzw. \ref{anhang:sycl:forcecalculation}
+(SYCL).
+
+Ein gesonderter Vergleich ist zwischen CUDA und SYCL nötig, da das
+experimentelle Backend für NVIDIA-GPUs der ComputeCpp-Implementierung die
+Funktion \texttt{rsqrtf} für die reziproke Quadratwurzel nicht unterstützt. Da
+die äquivalente Berechnung \texttt{1.f / sqrtf} deutlich langsamer ist, wurde
+stattdessen eine schnellere, weniger genaue Implementierung der Funktion
+\texttt{rsqrtf} aus dem Quelltext des Spiels \textit{Quake 3 Arena} übernommen
+(siehe Quelltext~\ref{nvidia:nbody:qrsqrt} für eine normale
+C++-Implementierung).
+
+\begin{code}
+    \begin{minted}[fontsize=\small]{c++}
+auto Q_rsqrt(float number) -> float
+{
+    auto x2 = number * 0.5f;
+    auto y = number;
+    auto i = *(reinterpret_cast<std::int32_t*>(&y));
+
+    i = 0x5f3759df - (i >> 1);
+
+    y = *(reinterpret_cast<float*>(&i));
+    y *= 1.5f - (x2 * y * y);
+
+    return y;
+}
+    \end{minted}
+    \caption{Quake-3-Implementierung der rsqrt-Funktion}
+    \label{nvidia:nbody:qrsqrt}
+\end{code}
+
+\subsubsection{Messmethoden}
+\label{nvidia:nbody:methoden}
+
+Der N-Body-Benchmark wurde für jede verwendete Block-Größe über 10 Zeitschritte
+($i$) ausgeführt. Anhand der dafür benötigten Laufzeit $t$ (in
+Sekunden) lassen sich die erreichten \gls{flops} nach dem folgenden Schema
+berechnen:
+
+\begin{align*}
+    I &= n \cdot n \cdot i\\
+    I_s &= \frac{I}{t}\\
+    \text{FLOPS} &= I_s \cdot 20,
+\end{align*}
+
+wobei $I$ die Zahl der Interaktionen darstellt und $I_s$ die Interaktionen pro
+Sekunde. Die Berechnung einer Interaktion benötigt 20 \glspl{flop}.
+
+Die Compiler-Flags sind mit denen des zcopy-Benchmarks identisch (siehe
+Abschnitt~\ref{nvidia:zcopy:methoden}).
+
+\subsubsection{Optimierung und Auswertung}
+\label{nvidia:nbody:auswertung}
+
+Eine einfache Optimierung ist das Ausrollen der Schleife, die nacheinander die
+Interaktionen berechnet. Dadurch erhöht sich zwar der Registerbedarf pro Thread,
+der mögliche Grad an \textit{instruction-level parallelism} (ILP) wächst aber
+ebenfalls, da es nun weniger Instruktionen gibt, die von vorherigen
+Instruktionen abhängig sind. Zudem verringert sich der Overhead, der durch
+Verzweigungsinstruktionen anfällt.
+
+Diese Effekte sind deutlich in der Abbildung~\ref{nvidia:nbody:unroll:cuda} zu
+sehen:  durch die Bestimmung eines besseren Ausrollfaktors lassen sich in diesem
+Benchmark bei einer festen Kachelgröße von $p = 256$ knapp \num{600} GFLOPS mehr
+Durchsatz gewinnen. Dieses Verhalten kann auch bei der Implementierung mit
+\gls{hip} (siehe Abbildung~\ref{anhang:nvidia:nbody:unroll:hip}) beobachtet
+werden, nicht jedoch bei SYCL (siehe
+Abbildung~\ref{nvidia:nbody:unroll:sycl}). Hier ist zu vermuten, dass der
+Compiler den Ausrollfaktor ignoriert oder nicht zu verarbeiten weiß.
+
+\begin{figure}
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {K20x -- N-Body -- Ausrollen -- CUDA},
+            xlabel = {Ausrollfaktor},
+            ylabel = {GFLOPS},
+            xmode = log,
+            log basis x = 2,
+            xmin = 1, xmax = 1024,
+            xtick = {1,2,4,8,16,32,64,128,256,512,1024},
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = outer north east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = count, y = CUDA, col sep = semicolon]
+                           {data/nbody-nvidia-unroll-524288.csv};
+            \addlegendentry{$n = 524.288$} 
+
+            \addplot table [x = count, y = CUDA, col sep = semicolon]
+                           {data/nbody-nvidia-unroll-65536.csv};
+            \addlegendentry{$n = 65.536$} 
+
+            \addplot table [x = count, y = CUDA, col sep = semicolon]
+                           {data/nbody-nvidia-unroll-8192.csv};
+            \addlegendentry{$n = 8.192$} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{N-Body: Performanzgewinn durch das Ausrollen der Schleife (CUDA)}
+    \label{nvidia:nbody:unroll:cuda}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {K20x -- N-Body -- Ausrollen -- SYCL},
+            xlabel = {Ausrollfaktor},
+            ylabel = {GFLOPS},
+            xmode = log,
+            log basis x = 2,
+            xmin = 1, xmax = 1024,
+            xtick = {1,2,4,8,16,32,64,128,256,512,1024},
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = outer north east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = count, y = SYCL, col sep = semicolon]
+                           {data/nbody-nvidia-unroll-524288.csv};
+            \addlegendentry{$n = 524.288$} 
+
+            \addplot table [x = count, y = SYCL, col sep = semicolon]
+                           {data/nbody-nvidia-unroll-65536.csv};
+            \addlegendentry{$n = 65.536$} 
+
+            \addplot table [x = count, y = SYCL, col sep = semicolon]
+                           {data/nbody-nvidia-unroll-8192.csv};
+            \addlegendentry{$n = 8.192$} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{N-Body: Performanzgewinn durch das Ausrollen der Schleife (SYCL)}
+    \label{nvidia:nbody:unroll:sycl}
+\end{figure}
+
+Es ist außerdem festzustellen, dass der Ausrollfaktor auf \gls{hip} einen
+ähnlichen Einfluss wie auf CUDA hat. \gls{hip} erreicht jedoch bei kleinen und
+großen Faktoren weniger \gls{flops} als CUDA, während mittlere Faktoren ähnliche
+Ergebnisse erzielen (siehe Abbildung~\ref{nvidia:nbody:unroll:cudahip}).
+Möglicherweise verhindern das Ummanteln des CUDA-\gls{api} durch das
+\gls{hip}-\gls{api} oder der Aufruf des \texttt{nvcc}-Compilers durch das
+\texttt{hipcc}-Skript einige kleinere Compiler-Optimierungen, die bei nativem
+CUDA-Code möglich wären.
+
+Interessant ist ebenfalls, dass ein relativ großer Ausrollfaktor von \num{128}
+bei \gls{hip} noch positive Auswirkungen auf die Performanz hat.
+Normalerweise wäre durch den hohen Registerverbrauch bereits hier eine
+schlechtere Leistung zu erwarten, da auf einem Multiprozessor weniger Blöcke
+gleichzeitig Platz finden. Hier wäre zu untersuchen, inwieweit die Register
+wiederverwendet werden und wie sich dies auf die Auslastung der Multiprozessoren
+auswirkt.
+
+Anhand dieser Messung wurde für den weiteren Verlauf ein Ausrollfaktor von
+\num{64} festgelegt.
+
+\begin{figure}
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {K20x -- N-Body -- Ausrollen -- CUDA und HIP},
+            xlabel = {Ausrollfaktor},
+            ylabel = {GFLOPS},
+            xmode = log,
+            log basis x = 2,
+            xmin = 1, xmax = 1024,
+            xtick = {1,2,4,8,16,32,64,128,256,512,1024},
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = outer north east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = count, y = CUDA, col sep = semicolon]
+                           {data/nbody-nvidia-unroll-524288.csv};
+            \addlegendentry{CUDA} 
+
+            \addplot table [x = count, y = HIP, col sep = semicolon]
+                           {data/nbody-nvidia-unroll-524288.csv};
+            \addlegendentry{HIP} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{N-Body: Vergleich der Ausrollfaktoren zwischen CUDA und HIP ($n = 524.288$)}
+    \label{nvidia:nbody:unroll:cudahip}
+\end{figure}
+
+Der nächste performanzrelevante Faktor ist die Größe der Kacheln selbst. Aus den
+in der Abbildung~\ref{nvidia:nbody:tilesize:cuda} dargestellten Messergebnissen
+wird ersichtlich, dass die gewählte Kachelgröße auf die Leistung einen
+erheblichen Einfluss haben kann. Auch dieses Verhalten ist bei \gls{hip} (siehe
+Abbildung~\ref{anhang:nvidia:nbody:tilesize:hip}) und SYCL (siehe
+Abbildung~\ref{anhang:nvidia:nbody:tilesize:sycl}) feststellbar. Für den
+weiteren Messverlauf wird daher eine Kachelgröße von $p = 512$ angenommen.
+
+\begin{figure}
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {K20x -- N-Body -- Kachelgrößen -- CUDA},
+            xlabel = {Kachelgröße},
+            ylabel = {GFLOPS},
+            xmode = log,
+            log basis x = 2,
+            xtick = {32,64,128,256,512,1024},
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = outer north east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = tilesize, y = CUDA, col sep = semicolon]
+                           {data/nbody-nvidia-tilesize-524288.csv};
+            \addlegendentry{$n = 524.288$} 
+
+            \addplot table [x = tilesize, y = CUDA, col sep = semicolon]
+                           {data/nbody-nvidia-tilesize-65536.csv};
+            \addlegendentry{$n = 65.536$} 
+
+            \addplot table [x = tilesize, y = CUDA, col sep = semicolon]
+                           {data/nbody-nvidia-tilesize-8192.csv};
+            \addlegendentry{$n = 8.192$} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{N-Body: Performanz bei verschiedenen Kachelgrößen (CUDA)}
+    \label{nvidia:nbody:tilesize:cuda}
+\end{figure}
+
+Mit der experimentell ermittelten Konfiguration lässt sich ein direkter
+Vergleich zwischen CUDA und \gls{hip} einerseits sowie CUDA (mit
+\texttt{Q\_rsqrt}) und SYCL andererseits anstellen. Die
+Abbildung~\ref{nvidia:nbody:comparisonhip} zeigt, dass die Performanz bei CUDA
+und \gls{hip} nahezu identisch ist. Der Blick in den generierten Maschinen-Code
+zeigt, dass der \texttt{nvcc}-Compiler und der \texttt{hcc}-Wrapper um
+\texttt{nvcc} dasselbe Ergebnis erzeugen (siehe
+Quelltexte~\ref{nvidia:nbody:ptxnvcc} und \ref{nvidia:nbody:ptxhip}).
+
+\begin{figure}
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {K20x -- N-Body -- Leistungsvergleich -- CUDA und HIP},
+            xlabel = {$n$},
+            ylabel = {GFLOPS},
+            xtick = data,
+            xmode = log,
+            log basis x = 2,
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = outer north east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma,
+            ybar,
+            width = 0.75\textwidth,
+            scale only axis,
+            ymin = 0, ymax = 4000,
+            extra y ticks = {1967.5, 3935},
+            extra y tick labels = {},
+            extra y tick style={grid=major, major grid style={solid,thick,draw=red}},
+            scaled y ticks = false,
+            ylabel near ticks,
+            xlabel near ticks
+        ]
+            \addplot table [x = n, y = CUDA, col sep = semicolon]
+                           {data/nbody-nvidia.csv};
+            \addlegendentry{CUDA} 
+
+            \addplot table [x = n, y = HIP, col sep = semicolon]
+                           {data/nbody-nvidia.csv};
+            \addlegendentry{HIP} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{N-Body: Leistungsvergleich zwischen CUDA und HIP (Peak bei \num{1967.5} (ohne FMA) bzw. \num{3935} GFLOPS)}
+    \label{nvidia:nbody:comparisonhip}
+\end{figure}
+
+\begin{figure}
+    \begin{minipage}{0.5\textwidth}
+        \centering
+        \begin{minted}[fontsize=\footnotesize]{text}
+shl.b32 %r29, %r42, 4;
+add.s32 %r31, %r22, %r29;
+ld.shared.v4.f32 {%f50, %f51, %f52,
+                  %f53}, [%r31];
+sub.f32 %f58, %f50, %f35;
+sub.f32 %f59, %f51, %f36;
+sub.f32 %f60, %f52, %f37;
+mov.f32 %f61, 0f358637BE;
+fma.rn.f32 %f62, %f60, %f60, %f61;
+fma.rn.f32 %f63, %f59, %f59, %f62;
+fma.rn.f32 %f64, %f58, %f58, %f63;
+mul.f32 %f65, %f64, %f64;
+mul.f32 %f66, %f64, %f65;
+rsqrt.approx.f32 %f67, %f66;
+mul.f32 %f68, %f53, %f67;
+fma.rn.f32 %f69, %f58, %f68, %f21590;
+fma.rn.f32 %f70, %f59, %f68, %f21589;
+fma.rn.f32 %f71, %f60, %f68, %f21588;
+        \end{minted}
+        \captionof{listing}{N-Body: Maschinencode des CUDA-Kernels}
+        \label{nvidia:nbody:ptxnvcc}
+    \end{minipage}
+    %
+    \begin{minipage}{0.5\textwidth}
+        \centering
+        \begin{minted}[fontsize=\footnotesize]{text}
+shl.b32 %r29, %r42, 4;
+add.s32 %r31, %r22, %r29;
+ld.shared.v4.f32 {%f50, %f51, %f52,
+                  %f53}, [%r31];
+sub.f32 %f58, %f50, %f35;
+sub.f32 %f59, %f51, %f36;
+sub.f32 %f60, %f52, %f37;
+mov.f32 %f61, 0f358637BE;
+fma.rn.f32 %f62, %f60, %f60, %f61;
+fma.rn.f32 %f63, %f59, %f59, %f62;
+fma.rn.f32 %f64, %f58, %f58, %f63;
+mul.f32 %f65, %f64, %f64;
+mul.f32 %f66, %f64, %f65;
+rsqrt.approx.f32 %f67, %f66;
+mul.f32 %f68, %f53, %f67;
+fma.rn.f32 %f69, %f58, %f68, %f21590;
+fma.rn.f32 %f70, %f59, %f68, %f21589;
+fma.rn.f32 %f71, %f60, %f68, %f21588;
+        \end{minted}
+        \captionof{listing}{N-Body: Maschinencode des HIP-Kernels}
+        \label{nvidia:nbody:ptxhip}
+    \end{minipage}
+\end{figure}
+
+Die Abbildung~\ref{nvidia:nbody:comparisonsycl} zeigt die Ergebnisse des
+Vergleichs zwischen CUDA (mit \texttt{Q\_rsqrt}) und SYCL. Beide
+Implementierungen erreichen ähnliche Ergebnisse, wobei CUDA zumeist etwas
+schneller arbeitet. Die Quelltexte~\ref{nvidia:nbody:ptxnvcc-qrsqrt} (CUDA) und
+\ref{nvidia:nbody:ptxsycl} (SYCL) zeigen außerdem merkliche Unterschiede
+zwischen den generierten Maschinen-Codes, was möglicherweise CUDAs bessere
+Ergebnisse erklärt.
+
+\begin{figure}
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {K20x -- N-Body -- Leistungsvergleich -- CUDA und SYCL},
+            xlabel = {$n$},
+            ylabel = {GFLOPS},
+            xtick = data,
+            xmode = log,
+            log basis x = 2,
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = outer north east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma,
+            ybar,
+            width = 0.75\textwidth,
+            scale only axis,
+            ymin = 0, ymax = 4000,
+            extra y ticks = {1967.5, 3935},
+            extra y tick labels = {},
+            extra y tick style={grid=major, major grid style={solid,thick,draw=red}},
+            scaled y ticks = false,
+            ylabel near ticks,
+            xlabel near ticks
+        ]
+            \addplot table [x = n, y = CUDAQ, col sep = semicolon]
+                           {data/nbody-nvidia.csv};
+            \addlegendentry{CUDA} 
+
+            \addplot table [x = n, y = SYCL, col sep = semicolon]
+                           {data/nbody-nvidia.csv};
+            \addlegendentry{SYCL} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{N-Body: Leistungsvergleich zwischen CUDA (mit Q\_rsqrt) und SYCL (Peak bei \num{1967.5} (ohne FMA) bzw. \num{3935} GFLOPS)}
+    \label{nvidia:nbody:comparisonsycl}
+\end{figure}
+
+\begin{figure}
+    \begin{minipage}{0.5\textwidth}
+        \centering
+        \begin{minted}[fontsize=\footnotesize]{text}
+ld.shared.v4.f32 {%f50, %f51, %f52,
+                  %f53}, [%r31];
+sub.f32 %f58, %f50, %f35;
+sub.f32 %f59, %f51, %f36;
+sub.f32 %f60, %f52, %f37;
+mov.f32 %f61, 0f358637BE;
+fma.rn.f32 %f62, %f60, %f60, %f61;
+fma.rn.f32 %f63, %f59, %f59, %f62;
+fma.rn.f32 %f64, %f58, %f58, %f63;
+mul.f32 %f65, %f64, %f64;
+mul.f32 %f66, %f64, %f65;
+mul.f32 %f67, %f66, 0f3F000000;
+mov.b32 %r32, %f66;
+shr.s32 %r33, %r32, 1;
+mov.u32 %r34, 1597463007;
+sub.s32 %r35, %r34, %r33;
+mov.b32 %f68, %r35;
+mul.f32 %f69, %f67, %f68;
+mul.f32 %f70, %f68, %f69;
+mov.f32 %f71, 0f3FC00000;
+sub.f32 %f72, %f71, %f70;
+mul.f32 %f73, %f68, %f72;
+mul.f32 %f74, %f53, %f73;
+fma.rn.f32 %f75, %f58, %f74, %f13403;
+fma.rn.f32 %f76, %f59, %f74, %f13402;
+fma.rn.f32 %f77, %f60, %f74, %f13401;
+        \end{minted}
+        \captionof{listing}{N-Body: Maschinencode des CUDA-Kernels (mit Q\_rsqrt)}
+        \label{nvidia:nbody:ptxnvcc-qrsqrt}
+    \end{minipage}
+    %
+    \begin{minipage}{0.5\textwidth}
+        \centering
+        \begin{minted}[fontsize=\footnotesize]{text}
+ld.shared.v4.f32 {%f33, %f34, %f35,
+                  %f36}, [%rd25];
+sub.rn.f32 %f37, %f33, %f1;
+sub.rn.f32 %f38, %f34, %f2;
+sub.rn.f32 %f39, %f35, %f3;
+fma.rn.f32 %f40, %f39, %f39,
+           0f358637BE;
+fma.rn.f32 %f41, %f38, %f38, %f40;
+fma.rn.f32 %f42, %f37, %f37, %f41;
+mul.rn.f32 %f43, %f42, %f42;
+mul.rn.f32 %f44, %f42, %f43;
+mul.rn.f32 %f45, %f44, 0fBF000000;
+mov.b32 %r13, %f44;
+shr.s32 %r14, %r13, 1;
+sub.s32 %r16, %r15, %r14;
+mov.b32 %f46, %r16;
+mul.rn.f32 %f47, %f45, %f46;
+mul.rn.f32 %f48, %f47, %f46;
+add.rn.f32 %f49, %f48, 0f3FC00000;
+mul.rn.f32 %f50, %f49, %f46;
+mul.rn.f32 %f51, %f36, %f50;
+fma.rn.f32 %f76, %f39, %f51, %f76;
+fma.rn.f32 %f75, %f38, %f51, %f75;
+fma.rn.f32 %f74, %f37, %f51, %f74;
+        \end{minted}
+        \captionof{listing}{N-Body: Maschinencode des SYCL-Kernels}
+        \label{nvidia:nbody:ptxsycl}
+    \end{minipage}
+\end{figure}

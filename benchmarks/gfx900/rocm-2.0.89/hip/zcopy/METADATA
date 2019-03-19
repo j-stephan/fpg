@@ -1,0 +1,15 @@
+HCC clang version 8.0.0 (ssh://gerritgit/compute/ec/hcc-tot/clang 6ec3c61e09fbb60373eaf5a40021eb862363ba2c) (ssh://gerritgit/lightning/ec/llvm ab3b88ffc2ae50f55361a49aec89f6e95d9d0ec4) (based on HCC 1.3.18482-757fb49-6ec3c61-ab3b88f )
+Target: x86_64-unknown-linux-gnu
+Thread model: posix
+InstalledDir: /opt/rocm/bin
+
+ GPU  DID    ECC        VBIOS
+  0   687f   N/A   115-D050PIL-100 
+
+GPU[0] 		: GPU Clock Level: 7 (1630Mhz)
+GPU[0] 		: GPU Memory Clock Level: 3 (945Mhz)
+GPU[0] 		: PCIE Clock Level: 1 (8.0GT/s, x16)
+
+Linux fwk388 4.15.0-43-generic #46~16.04.1-Ubuntu SMP Fri Dec 7 13:31:08 UTC 2018 x86_64 x86_64 x86_64 GNU/Linux
+
+hcc `hcc-config --cxxflags --ldflags` -O3 -std=c++17 zcopy.cpp -o zcopy -Wall -Wextra -pedantic
