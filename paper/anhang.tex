@@ -1,0 +1,1699 @@
+\appendix
+
+\section{CUDA-Kernel}
+
+\subsection{zcopy}
+
+\begin{code}
+    \begin{minted}[breaklines,breakafter=\,,escapeinside=||,fontsize=\small]{cuda}
+__global__ void read_write(const float4* __restrict__ A,
+                                 float4* __restrict__ B,
+                           std::size_t num_elems)
+{
+    auto stride = gridDim.x * blockDim.x;
+    for(auto i = blockIdx.x * blockDim.x + threadIdx.x;
+             i < elems;
+             i += stride)
+    {
+        B[i] = A[i];
+    }
+}
+
+__global__ void write(float4* __restrict__ B, std::size_t num_elems)
+{
+    auto stride = gridDim.x * blockDim.x;
+    for(auto i = blockIdx.x * blockDim.x + threadIdx.x;
+             i < elems;
+             i += stride)
+    {
+        B[i] = make_float4{0.f, 0.f, 0.f, 0.f};
+    }
+}
+    \end{minted}
+    \caption{zcopy -- CUDA-Implementierung}
+    \label{anhang:cuda:zcopy}
+\end{code}
+
+Anmerkung: Sofern der Programmierer garantieren kann, das zwei Zeiger auf
+unterschiedliche, nicht überlappende Datenbereiche verweisen, können diese mit
+dem Schlüsselwort \texttt{\_\_restrict\_\_} markiert werden. Der Compiler kann
+dadurch effizientere Speicherzugriffe generieren.
+
+\subsection{Reduction}
+
+\begin{code}
+    \begin{minted}[breaklines,breakafter=\,,escapeinside=||,fontsize=\small]{cuda}
+__global__ void block_reduce(const int* __restrict__ data,
+                                   int* __restrict__ result,
+                                   std::size_t size)
+{
+    extern __shared__ int scratch[]; 
+
+    auto i = blockIdx.x * blockDim.x + threadIdx.x;
+    if(i >= size) return;
+
+    auto tsum = data[i];
+
+    auto grid_size = gridDim.x * blockDim.x;
+    i += grid_size;
+
+    while((i + 3 * grid_size) < size) {
+        tsum += data[i] + data[i + grid_size] +
+                data[i + 2 * grid_size] + data[i + 3 * grid_size];
+            i += 4 * grid_size;
+    }
+    while(i < size) { // noch fehlende Elemente
+        tsum += data[i];
+        i += grid_size;
+    }
+
+    scratch[threadIdx.x] = tsum;
+    __syncthreads();
+
+    #pragma unroll
+    for(auto bs = blockDim.x, bsup = (blockDim.x + 1) / 2;
+             bs > 1; bs /= 2, bsup = (bs + 1) / 2) {
+        auto cond = threadIdx.x < bsup &&
+            (threadIdx.x + bsup) < blockDim.x &&
+            (blockIdx.x * blockDim.x + threadIdx.x + bsup)
+            < size;
+
+        if(cond)
+            scratch[threadIdx.x] += scratch[threadIdx.x + bsup];
+        __syncthreads();
+    }
+
+    if(threadIdx.x == 0) result[blockIdx.x] = scratch[0];
+}
+    \end{minted}
+    \caption{Reduce -- CUDA-Implementierung}
+    \label{anhang:cuda:reduction}
+\end{code}
+
+\subsection{N-Body}
+
+\begin{code}
+    \begin{minted}[breaklines,breakafter=\,,escapeinside=||,fontsize=\small]{cuda}
+|\textbf{\textcolor{keyword-green}{constexpr}}| auto eps = 0.001f;
+|\textbf{\textcolor{keyword-green}{constexpr}}| auto eps2 = eps * eps;
+
+__device__ auto body_body_interaction(float4 bi, float4 bj, float3 ai)
+-> float3
+{
+    // r_ij [3 FLOPS]
+    auto r = float3{};
+    r.x = bj.x - bi.x;
+    r.y = bj.y - bi.y;
+    r.z = bj.z - bi.z;
+
+    // dist_sqr = skalarprodukt(r_ij, r_ij) + epsilon^2 [6 FLOPS]
+    auto dist_sqr = fmaf(r.x, r.x,
+                         fmaf(r.y, r.y,
+                              fmaf(r.z, r.z, eps2)));
+
+    // inv_dist_cube = 1 / dist_sqr^(3/2) [4 FLOPS]
+    auto dist_sixth = dist_sqr * dist_sqr * dist_sqr;
+    auto inv_dist_cube = rsqrtf(dist_sixth);
+
+    // s = m_j * inv_dist_cube [1 FLOP]
+    auto s = bj.w * inv_dist_cube;
+
+    // a_i = a_i + s * r_ij [6 FLOPS]
+    ai.x = fmaf(r.x, s, ai.x);
+    ai.y = fmaf(r.y, s, ai.y);
+    ai.z = fmaf(r.z, s, ai.z);
+
+    return ai;
+}
+    \end{minted}
+    \caption{N-Body: body\_body\_interaction - CUDA-Implementierung}
+    \label{anhang:cuda:bodybodyinteraction}
+\end{code}
+
+\begin{code}
+    \begin{minted}[breaklines,breakafter=\,,escapeinside=||,fontsize=\small]{cuda}
+__device__ auto force_calculation(float4 body_pos,
+                                  const float4* positions,
+                                  unsigned tiles)
+-> float3
+{
+    extern __shared__ float4 sh_position[];
+
+    auto acc = float3{};
+
+    for(auto tile = 0u; tile < tiles; ++tile)
+    {
+        auto idx = tile * blockDim.x + threadIdx.x;
+
+        sh_position[threadIdx.x] = positions[idx];
+        __syncthreads();
+
+        // entspricht tile_calculation()
+        #pragma unroll
+        for(auto i = 0u; i < blockDim.x; ++i)
+            acc = body_body_interaction(body_pos, sh_position[i],
+                                        acc);
+        __syncthreads();
+    }
+    return acc;
+}
+    \end{minted}
+    \caption{N-Body: force\_calculation - CUDA-Implementierung}
+    \label{anhang:cuda:forcecalculation}
+\end{code}
+
+\section{HIP-Kernel}
+
+\subsection{zcopy}
+
+\begin{code}
+    \begin{minted}[breaklines,breakafter=\,,escapeinside=||,fontsize=\small]{cuda}
+__global__ void read_write(const float4* __restrict__ A,
+                                 float4* __restrict__ B,
+                           std::size_t num_elems)
+{
+    auto stride = |\textcolor{keyword-green}{hipGridDim\_x}| * |\textcolor{keyword-green}{hipBlockDim\_x}|;
+    for(auto i = |\textcolor{keyword-green}{hipBlockIdx\_x}| * |\textcolor{keyword-green}{hipBlockDim\_x}| + |\textcolor{keyword-green}{hipThreadIdx\_x}|;
+             i < elems;
+             i += stride)
+    {
+        B[i] = A[i];
+    }
+}
+
+__global__ void write(float4* __restrict__ B, std::size_t num_elems);
+{
+    auto stride = |\textcolor{keyword-green}{hipGridDim\_x}| * |\textcolor{keyword-green}{hipBlockDim\_x}|;
+    for(auto i = |\textcolor{keyword-green}{hipBlockIdx\_x}| * |\textcolor{keyword-green}{hipBlockDim\_x}| + |\textcolor{keyword-green}{hipThreadIdx\_x}|;
+             i < elems;
+             i += stride)
+    {
+        B[i] = make_float4{0.f, 0.f, 0.f, 0.f};
+    }
+}
+    \end{minted}
+    \caption{zcopy -- HIP-Implementierung}
+    \label{anhang:hip:zcopy}
+\end{code}
+
+\subsection{Reduction}
+
+\begin{code}
+    \begin{minted}[breaklines,breakafter=\,,escapeinside=||,fontsize=\small]{cuda}
+__global__ void block_reduce(const int* __restrict__ data,
+                                   int* __restrict__ result,
+                                   std::size_t size)
+{
+    extern __shared__ int scratch[]; 
+
+    auto i = |\textcolor{keyword-green}{hipBlockIdx\_x}| * |\textcolor{keyword-green}{hipBlockDim\_x}| + |\textcolor{keyword-green}{hipThreadIdx\_x}|;
+    if(i >= size) return;
+
+    auto tsum = data[i];
+
+    auto grid_size = |\textcolor{keyword-green}{hipGridDim\_x}| * |\textcolor{keyword-green}{hipBlockDim\_x}|;
+    i += grid_size;
+
+    while((i + 3 * grid_size) < size) {
+        tsum += data[i] + data[i + grid_size] +
+                data[i + 2 * grid_size] + data[i + 3 * grid_size];
+            i += 4 * grid_size;
+    }
+    while(i < size) { // noch fehlende Elemente
+        tsum += data[i];
+        i += grid_size;
+    }
+
+    scratch[|\textcolor{keyword-green}{hipThreadIdx\_x}|] = tsum;
+    __syncthreads();
+
+    #pragma unroll
+    for(auto bs = |\textcolor{keyword-green}{hipBlockDim\_x}|, bsup = (|\textcolor{keyword-green}{hipBlockDim\_x}| + 1) / 2;
+             bs > 1; bs /= 2, bsup = (bs + 1) / 2) {
+        auto cond = |\textcolor{keyword-green}{hipThreadIdx\_x}| < bsup &&
+            (|\textcolor{keyword-green}{hipThreadIdx\_x}| + bsup) < |\textcolor{keyword-green}{hipBlockDim\_x}| &&
+            (|\textcolor{keyword-green}{hipBlockIdx\_x}| * |\textcolor{keyword-green}{hipBlockDim\_x}| + |\textcolor{keyword-green}{hipThreadIdx\_x}| + bsup)
+            < size;
+
+        if(cond)
+            scratch[|\textcolor{keyword-green}{hipThreadIdx\_x}|] += scratch[|\textcolor{keyword-green}{hipThreadIdx\_x}| + bsup];
+        __syncthreads();
+    }
+
+    if(|\textcolor{keyword-green}{hipThreadIdx\_x}| == 0) result[|\textcolor{keyword-green}{hipBlockIdx\_x}|] = scratch[0];
+}
+    \end{minted}
+    \caption{Reduce -- HIP-Implementierung}
+    \label{anhang:hip:reduction}
+\end{code}
+
+\subsection{N-Body}
+
+\begin{code}
+    \begin{minted}[breaklines,breakafter=\,,escapeinside=||,fontsize=\small]{cuda}
+|\textbf{\textcolor{keyword-green}{constexpr}}| auto eps = 0.001f;
+|\textbf{\textcolor{keyword-green}{constexpr}}| auto eps2 = eps * eps;
+
+__device__ auto body_body_interaction(float4 bi, float4 bj, float3 ai)
+-> float3
+{
+    // r_ij [3 FLOPS]
+    auto r = float3{};
+    r.x = bj.x - bi.x;
+    r.y = bj.y - bi.y;
+    r.z = bj.z - bi.z;
+
+    // dist_sqr = skalarprodukt(r_ij, r_ij) + epsilon^2 [6 FLOPS]
+    auto dist_sqr = fmaf(r.x, r.x,
+                         fmaf(r.y, r.y,
+                              fmaf(r.z, r.z, eps2)));
+
+    // inv_dist_cube = 1 / dist_sqr^(3/2) [4 FLOPS]
+    auto dist_sixth = dist_sqr * dist_sqr * dist_sqr;
+    auto inv_dist_cube = rsqrtf(dist_sixth);
+
+    // s = m_j * inv_dist_cube [1 FLOP]
+    auto s = bj.w * inv_dist_cube;
+
+    // a_i = a_i + s * r_ij [6 FLOPS]
+    ai.x = fmaf(r.x, s, ai.x);
+    ai.y = fmaf(r.y, s, ai.y);
+    ai.z = fmaf(r.z, s, ai.z);
+
+    return ai;
+}
+    \end{minted}
+    \caption{N-Body: body\_body\_interaction - HIP-Implementierung}
+    \label{anhang:hip:bodybodyinteraction}
+\end{code}
+
+\begin{code}
+    \begin{minted}[breaklines,breakafter=\,,escapeinside=||,fontsize=\small]{cuda}
+__device__ auto force_calculation(float4 body_pos,
+                                  const float4* positions,
+                                  unsigned tiles)
+-> float3
+{
+    extern __shared__ float4 sh_position[];
+
+    auto acc = float3{};
+
+    for(auto tile = 0u; tile < tiles; ++tile)
+    {
+        auto idx = tile * |\textcolor{keyword-green}{hipBlockDim\_x}| + |\textcolor{keyword-green}{hipThreadIdx\_x}|;
+
+        sh_position[|\textcolor{keyword-green}{hipThreadIdx\_x}|] = positions[idx];
+        __syncthreads();
+
+        // entspricht tile_calculation()
+        #pragma unroll
+        for(auto i = 0u; i < |\textcolor{keyword-green}{hipBlockDim\_x}|; ++i)
+            acc = body_body_interaction(body_pos, sh_position[i],
+                                        acc);
+        __syncthreads();
+    }
+    return acc;
+}
+    \end{minted}
+    \caption{N-Body: force\_calculation - HIP-Implementierung}
+    \label{anhang:hip:forcecalculation}
+\end{code}
+
+
+\section{HC-Kernel}
+
+\subsection{zcopy}
+
+\begin{code}
+    \begin{minted}[breaklines,breakafter=\,,escapeinside=||,fontsize=\small]{c++}
+[[hc]]
+template <typename DataT>
+void read_write(hc::tiled_index<1> idx, hc::array_view<DataT, 1> A,
+                hc::array_view<DataT, 1> B, std::size_t elems,
+                unsigned int tiles, unsigned int tile_size)
+{
+    auto stride = tiles * tile_size;
+    for(auto i = idx.tile[0] * tile_size + idx.local[0];
+             i < elems;
+             i += stride)
+    {
+        B[i] = A[i];
+    }
+}
+
+[[hc]]
+template <typename DataT>
+void write(hc::tiled_index<1> idx, hc::array_view<DataT, 1> B,
+           std::size_t elems, unsigned int tiles,
+           unsigned int tile_size)
+{
+    auto stride = tiles * tile_size;
+    for(auto i = idx.tile[0] * tile_size + idx.local[0];
+             i < elems;
+             i += stride)
+    {
+        B[i] = DataT{};
+    }
+}
+    \end{minted}
+    \caption{zcopy - HC-Implementierung}
+    \label{anhang:hc:zcopy}
+\end{code}
+
+\subsection{Reduction}
+
+\begin{code}
+    \begin{minted}[breaklines,breakafter=\,,escapeinside=||,fontsize=\small]{c++}
+void block_reduce(hc::tiled_index<1> idx,
+    hc::array_view<int, 1> data, hc::array_view<int, 1> result,
+    std::size_t size, int blocks, int block_size) [[hc]]
+{
+    auto scratch = static_cast<int*>(
+        hc::get_dynamic_group_segment_base_pointer());
+
+    auto i = static_cast<unsigned>(idx.tile[0] * block_size
+                                   + idx.local[0]);
+    if(i >= size) return;
+
+    auto tsum = data[i];
+
+    auto grid_size = blocks * block_size;
+    i += grid_size;
+
+    while((i + 3 * grid_size) < size) {
+        tsum += data[i] + data[i + grid_size] +
+                data[i + 2 * grid_size] + data[i + 3 * grid_size];
+        i += 4 * grid_size;
+    }
+    while(i < size) { // Noch fehlende Elemente
+        tsum += data[i];
+        i += grid_size;
+    }
+
+    scratch[idx.local[0]] = tsum;
+    idx.barrier.wait_with_tile_static_memory_fence();
+
+    #pragma unroll
+    for(auto bs = block_size, bsup = (block_size + 1) / 2;
+             bs > 1; bs /= 2, bsup = (bs + 1) / 2) {
+        auto cond = idx.local[0] < bsup &&
+            (idx.local[0] + bsup) < block_size &&
+            (idx.tile[0] * block_size + idx.local[0] + bsup) < size;
+
+        if(cond)
+            scratch[idx.local[0]] += scratch[idx.local[0] + bsup];
+        idx.barrier.wait_with_tile_static_memory_fence();
+    }
+
+    if(idx.local[0] == 0) result[idx.tile[0]] = scratch[0];
+}
+    \end{minted}
+    \caption{Reduction - HC-Implementierung}
+    \label{anhang:hc:reduction}
+\end{code}
+
+\subsection{N-Body}
+
+\begin{code}
+    \begin{minted}[breaklines,breakafter=\,,escapeinside=||,fontsize=\small]{c++}
+using float3 = hc::short_vector::float_3;
+using float4 = hc::short_vector::float_4;
+
+[[hc]]
+auto body_body_interaction(float4 bi, float4 bj, float3 ai) -> float3
+{
+    constexpr auto eps = 0.001f;
+    constexpr auto eps2 = eps * eps;
+
+    // r_ij [3 FLOPS]
+    auto r = bj.get_xyz() - bi.get_xyz();
+
+    // dist_sqr = skalarprodukt(r, r) + epsilon^2 [6 FLOPS]
+    auto dist_sqr = fmaf(r.x, r.x,
+                         fmaf(r.y, r.y,
+                              fmaf(r.z, r.z, eps2)));
+
+    // inv_dist_cube = 1 / dist_sqr^(3/2) [4 FLOPS]
+    auto dist_sixth = dist_sqr * dist_sqr * dist_sqr;
+    auto inv_dist_cube = rsqrtf(dist_sixth);
+
+    // s = m_j * inv_dist_cube [1 FLOP]
+
+    // a_i = a_i + s * r_ij [6 FLOPS]
+    ai.x = fmaf(r.x, s, ai.x);
+    ai.y = fmaf(r.y, s, ai.y);
+    ai.z = fmaf(r.z, s, ai.z);
+
+    return ai;
+}
+    \end{minted}
+    \caption{N-Body: body\_body\_interaction - HC-Implementierung}
+    \label{anhang:hc:bodybodyinteraction}
+\end{code}
+
+\begin{code}
+    \begin{minted}[breaklines,breakafter=\,,escapeinside=||,fontsize=\small]{c++}
+using float3 = hc::short_vector::float_3;
+using float4 = hc::short_vector::float_4;
+
+[[hc]]
+auto force_calculation(hc::tiled_index<1> idx, float4 body_pos,
+                       hc::array_view<const float4, 1> positions,
+                       float4* sh_position, unsigned tiles)
+-> float3
+{
+    auto acc = float3{};
+
+    for(auto tile = 0u; tile < tiles; ++tile)
+    {
+        auto id = tile * idx.tile_dim[0] + idx.local[0];
+
+        sh_position[idx.local[0]] = positions[id];
+        idx.barrier.wait_with_tile_static_memory_fence();
+
+        // entspricht tile_calculation()
+        #pragma unroll
+        for(auto i = 0u; i < idx.tile_dim[0]; ++i)
+            acc = body_body_interaction(body_pos, sh_position[i],
+                                        acc);
+        idx.barrier.wait_with_tile_static_memory_fence();
+    }
+    return acc;
+}
+    \end{minted}
+    \caption{N-Body: force\_calculation - HC-Implementierung}
+    \label{anhang:hc:forcecalculation}
+\end{code}
+
+\section{SYCL-Kernel}
+
+\subsection{zcopy}
+
+\begin{code}
+    \begin{minted}[breaklines,breakafter=\,,escapeinside=||,fontsize=\small]{c++}
+struct reader_writer
+{
+    cl::sycl::accessor<cl::sycl::float4, 1,
+                       cl::sycl::access::mode::read,
+                       cl::sycl::access::target::global_buffer> A;
+    cl::sycl::accessor<cl::sycl::float4, 1,
+                       cl::sycl::access::mode::discard_write,
+                       cl::sycl::access::target::global_buffer> B;
+
+    auto operator()(cl::sycl::nd_item<1> my_item) -> void
+    {
+        auto stride = my_item.get_group_range(0) *
+                      my_item.get_local_range(0);
+        for(auto i = my_item.get_global_id(0); i < elems; i += stride)
+        {
+            B[i] = A[i];
+        }
+    }
+};
+
+struct writer
+{
+    cl::sycl::accessor<cl::sycl::float4, 1,
+                       cl::sycl::access::mode::discard_write,
+                       cl::sycl::access::target::global_buffer> B;
+
+    auto operator()(cl::sycl::nd_item<1> my_item) -> void
+    {
+        auto stride = my_item.get_group_range(0) *
+                      my_item.get_local_range(0);
+        for(auto i = my_item.get_global_id(0); i < elems; i += stride)
+        {
+            B[i] = cl::sycl::float4{};
+        }
+    }
+};
+    \end{minted}
+    \caption{zcopy -- SYCL-Implementierung}
+    \label{anhang:sycl:zcopy}
+\end{code}
+
+\subsection{Reduction}
+
+\begin{code}
+    \begin{minted}[breaklines,breakafter=\,,escapeinside=||,fontsize=\small]{c++}
+namespace sycl = cl::sycl;
+struct block_reduce {
+    sycl::accessor<int, 1, sycl::access::mode::read,
+                   sycl::access::target::global_buffer> data;
+    sycl::accessor<int, 1, sycl::access::mode::write,
+                   sycl::access::target::global_buffer> result;
+    sycl::accessor<int, 1, sycl::access::mode::read_write,
+                   sycl::access::target::local> scratch;
+    std::size_t size;
+    auto operator()(sycl::nd_item<1> my_item) -> void {
+        auto i = my_item.get_global_id(0);
+        if(i >= size) return;
+        auto tsum = data[i];
+        auto grid_size = my_item.get_group_range(0) *
+                         my_item.get_local_range(0);
+        i += grid_size;
+        while((i + 3 * grid_size) < size) {
+            tsum += data[i] + data[i + grid_size] +
+                data[i + 2 * grid_size] + data[i + 3 * grid_size];
+            i += 4 * grid_size;
+        }
+        while(i < size) { // noch verbleibende Elemente
+            tsum += data[i]; i += grid_size;
+        }
+        scratch[my_item.get_local_id(0)] = tsum;
+        my_item.barrier(sycl::access::fence_space::local_space);
+        auto block_size = my_item.get_local_range(0);
+        auto global_id = my_item.get_global_id(0);
+        auto local_id = my_item.get_local_id(0);
+
+        #pragma unroll
+        for(auto bs = block_size, bsup = (block_size + 1) / 2;
+                 bs > 1; bs /= 2, bsup = (bs + 1) / 2) {
+            auto cond = local_id < bsup &&
+                        (local_id + bsup) < block_size &&
+                        (global_id + bsup) < size;
+            if(cond) scratch[local_id] += scratch[local_id + bsup];
+            my_item.barrier(sycl::access::fence_space::local_space);
+        }
+        if(my_item.get_local_id(0) == 0)
+            result[my_item.get_group_linear_id()] = scratch[0];
+    }
+};
+    \end{minted}
+    \caption{N-Body: Reduction - SYCL-Implementierung}
+    \label{anhang:sycl:reduction}
+\end{code}
+
+\subsection{N-Body}
+
+\begin{code}
+    \begin{minted}[breaklines,breakafter=\,,escapeinside=||,fontsize=\small]{c++}
+using float3 = cl::sycl::float3;
+using float4 = cl::sycl::float4;
+
+auto body_body_interaction(float4 bi, float4 bj, float3 ai) -> float3
+{
+    // r_ij [3 FLOPS]
+    auto r = bj.xyz() - bi.xyz();
+
+    // dist_sqr = dot(r_ij, r_ij) + EPS^2 [6 FLOPS]
+    const auto dist_sqr = cl::sycl::fma(r.x(), r.x(),
+                            cl::sycl::fma(r.y(), r.y(),
+                                cl::sycl::fma(r.z(), r.z(), eps2)));
+
+    // inv_dist_cube = 1/dist_sqr^(3/2) [4 FLOPS]
+    auto dist_sixth = dist_sqr * dist_sqr * dist_sqr;
+    auto inv_dist_cube = Q_rsqrt(dist_sixth);
+
+    // s = m_j * inv_dist_cube [1 FLOP]
+    const auto s = float{bj.w()} * inv_dist_cube;
+    const auto s3 = float3{s, s, s};
+
+    // a_i = a_i + s * r_ij [6 FLOPS]
+    ai = cl::sycl::fma(r, s3, ai);
+
+    return ai;
+}
+    \end{minted}
+    \caption{N-Body: body\_body\_interaction - SYCL-Implementierung}
+    \label{anhang:sycl:bodybodyinteraction}
+\end{code}
+
+\begin{code}
+    \begin{minted}[breaklines,breakafter=\,,escapeinside=||,fontsize=\small]{c++}
+namespace sycl = cl::sycl;
+using float3 = sycl::float3;
+using float4 = sycl::float4;
+
+auto force_calculation(sycl::nd_item<1> my_item, float4 body_pos,
+                       sycl::accessor<float4, 1,
+                         sycl::access::mode::read,
+                         sycl::access::target::global_buffer>
+                         positions,
+                       sycl::accessor<float4, 1, 
+                         sycl::access::mode::read_write,
+                         sycl::access::target::local> sh_position,
+                       unsigned tiles) -> float3
+{
+    auto acc = float3{0.f, 0.f, 0.f};
+
+    for(auto tile = 0u; tile < tiles; ++tile)
+    {
+        auto idx = tile * my_item.get_local_range(0) +
+                          my_item.get_local_id(0);
+
+        sh_position[my_item.get_local_id()] = positions[idx];
+        my_item.barrier(sycl::access::fence_space::local_space);
+
+        // entspricht tile_calculation()
+        #pragma unroll
+        for(auto i = 0u; i < my_item.get_local_range(0); ++i)
+        {
+            acc = body_body_interaction(body_pos, sh_position[i],
+                                        acc);
+        }
+        my_item.barrier(sycl::access::fence_space::local_space);
+    }
+
+    return acc;
+}
+    \end{minted}
+    \caption{N-Body: force\_calculation - SYCL-Implementierung}
+    \label{anhang:sycl:forcecalculation}
+\end{code}
+
+\section{Benchmark-Ergebnisse}
+
+\subsection{HIP-zcopy (AMD)}
+\label{anhang:hip:amdzcopyfig}
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {Vega 64 -- zcopy -- Lesen + Schreiben -- HIP},
+            xlabel = {Blöcke pro Multiprozessor},
+            ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
+            xmode = log,
+            log basis x = 2,
+            xmin = 1, xmax = 4096,
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = south east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            width = 0.75\textwidth,
+            scale only axis,
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = blocks_per_sm, y = throughput-64,
+                            col sep = semicolon]
+                           {data/zcopy-amd-hip-vega64-rw.csv};
+            \addlegendentry{$\text{Blockgröße} = 64$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-128,
+                            col sep = semicolon]
+                           {data/zcopy-amd-hip-vega64-rw.csv};
+            \addlegendentry{$\text{Blockgröße} = 128$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-256,
+                            col sep = semicolon]
+                           {data/zcopy-amd-hip-vega64-rw.csv};
+            \addlegendentry{$\text{Blockgröße} = 256$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-512,
+                            col sep = semicolon]
+                           {data/zcopy-amd-hip-vega64-rw.csv};
+            \addlegendentry{$\text{Blockgröße} = 512$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-1024,
+                            col sep = semicolon]
+                           {data/zcopy-amd-hip-vega64-rw.csv};
+            \addlegendentry{$\text{Blockgröße} = 1024$} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{zcopy: Bandbreite der Vega 64 ($n = 268435456$, Lesen und Schreiben, HIP)}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {Vega 64 -- zcopy -- Schreiben -- HIP},
+            xlabel = {Blöcke pro Multiprozessor},
+            ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
+            xmode = log,
+            log basis x = 2,
+            xmin = 1, xmax = 4096,
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = south east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            width = 0.75\textwidth,
+            scale only axis,
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = blocks_per_sm, y = throughput-64,
+                            col sep = semicolon]
+                           {data/zcopy-amd-hip-vega64-w.csv};
+            \addlegendentry{$\text{Blockgröße} = 64$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-128,
+                            col sep = semicolon]
+                           {data/zcopy-amd-hip-vega64-w.csv};
+            \addlegendentry{$\text{Blockgröße} = 128$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-256,
+                            col sep = semicolon]
+                           {data/zcopy-amd-hip-vega64-w.csv};
+            \addlegendentry{$\text{Blockgröße} = 256$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-512,
+                            col sep = semicolon]
+                           {data/zcopy-amd-hip-vega64-w.csv};
+            \addlegendentry{$\text{Blockgröße} = 512$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-1024,
+                            col sep = semicolon]
+                           {data/zcopy-amd-hip-vega64-w.csv};
+            \addlegendentry{$\text{Blockgröße} = 1024$} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{zcopy: Bandbreite der Vega 64 ($n = 268435456$, Schreiben, HIP)}
+\end{figure}
+
+\subsection{HIP-zcopy (NVIDIA)}
+\label{anhang:hip:nvzcopyfig}
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {K20x -- zcopy -- Lesen + Schreiben -- $2^x$ -- HIP},
+            xlabel = {Blöcke pro Multiprozessor},
+            ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
+            xmode = log,
+            log basis x = 2,
+            xmin = 1, xmax = 8192,
+            ymin = 40, ymax = 190,
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = south east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            width = 0.75\textwidth,
+            scale only axis,
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = blocks_per_sm, y = throughput-64,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-hip-k20x-generic-rw.csv};
+            \addlegendentry{$\text{Blockgröße} = 64$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-128,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-hip-k20x-generic-rw.csv};
+            \addlegendentry{$\text{Blockgröße} = 128$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-256,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-hip-k20x-generic-rw.csv};
+            \addlegendentry{$\text{Blockgröße} = 256$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-512,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-hip-k20x-generic-rw.csv};
+            \addlegendentry{$\text{Blockgröße} = 512$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-1024,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-hip-k20x-generic-rw.csv};
+            \addlegendentry{$\text{Blockgröße} = 1024$} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{zcopy: K20x-Bandbreite für Zweierpotenzen ($n = 117440512$, Lesen und Schreiben, HIP)}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {K20x -- zcopy -- Schreiben -- $2^x$ -- HIP},
+            xlabel = {Blöcke pro Multiprozessor},
+            ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
+            xmode = log,
+            log basis x = 2,
+            xmin = 1, xmax = 8192,
+            ymin = 70, ymax = 190,
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = south east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            width = 0.75\textwidth,
+            scale only axis,
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = blocks_per_sm, y = throughput-64,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-hip-k20x-generic-w.csv};
+            \addlegendentry{$\text{Blockgröße} = 64$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-128,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-hip-k20x-generic-w.csv};
+            \addlegendentry{$\text{Blockgröße} = 128$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-256,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-hip-k20x-generic-w.csv};
+            \addlegendentry{$\text{Blockgröße} = 256$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-512,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-hip-k20x-generic-w.csv};
+            \addlegendentry{$\text{Blockgröße} = 512$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-1024,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-hip-k20x-generic-w.csv};
+            \addlegendentry{$\text{Blockgröße} = 1024$} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{zcopy: K20x-Bandbreite für Zweierpotenzen ($n = 117440512$, Schreiben, HIP)}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {K20x -- zcopy -- Lesen + Schreiben -- $192 \cdot 2^x$ -- HIP},
+            xlabel = {Blöcke pro Multiprozessor},
+            ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
+            xmode = log,
+            log basis x = 2,
+            xmin = 1, xmax = 8192,
+            ymin = 40, ymax = 190,
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = south east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            width = 0.75\textwidth,
+            scale only axis,
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = blocks_per_sm, y = throughput-192,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-hip-k20x-optimized-rw.csv};
+            \addlegendentry{$\text{Blockgröße} = 192$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-384,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-hip-k20x-optimized-rw.csv};
+            \addlegendentry{$\text{Blockgröße} = 384$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-768,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-hip-k20x-optimized-rw.csv};
+            \addlegendentry{$\text{Blockgröße} = 768$} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{zcopy: K20x-Bandbreite für 192er-Vielfache ($n = 88080384$, Lesen und Schreiben, HIP)}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {K20x -- zcopy -- Schreiben -- $192 \cdot 2^x$ -- HIP},
+            xlabel = {Blöcke pro Multiprozessor},
+            ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
+            xmode = log,
+            log basis x = 2,
+            xmin = 1, xmax = 8192,
+            ymin = 70, ymax = 190,
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = south east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            width = 0.75\textwidth,
+            scale only axis,
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = blocks_per_sm, y = throughput-192,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-hip-k20x-optimized-w.csv};
+            \addlegendentry{$\text{Blockgröße} = 192$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-384,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-hip-k20x-optimized-w.csv};
+            \addlegendentry{$\text{Blockgröße} = 384$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-768,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-hip-k20x-optimized-w.csv};
+            \addlegendentry{$\text{Blockgröße} = 768$} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{zcopy: K20x-Bandbreite für 192er-Vielfache ($n = 88080384$, Schreiben, HIP)}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {K20x -- zcopy -- Schreiben -- HIP},
+            xlabel = {Blöcke pro Multiprozessor},
+            ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
+            xmode = log,
+            log basis x = 2,
+            xmin = 1, xmax = 8192,
+            ymin = 175, ymax = 188,
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = south east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            width = 0.75\textwidth,
+            scale only axis,
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = blocks_per_sm, y = throughput-768,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-hip-k20x-optimized-w.csv};
+            \addlegendentry{$\text{Blockgröße} = 768$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-1024,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-hip-k20x-generic-w.csv};
+            \addlegendentry{$\text{Blockgröße} = 1024$} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{zcopy: K20x-Bandbreite für Zweierpotenzen ($n = 117440512$) und 192er-Vielfache ($n = 88080384$, Schreiben,
+             HIP)}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {K20x -- zcopy -- HIP},
+            xlabel = {Blöcke pro Multiprozessor},
+            ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
+            xmode = log,
+            log basis x = 2,
+            xmin = 1, xmax = 8192,
+            % ymin = 175, ymax = 188,
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = south east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            width = 0.75\textwidth,
+            scale only axis,
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = blocks_per_sm, y = throughput-768,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-hip-k20x-optimized-rw.csv};
+            \addlegendentry{Lesen + Schreiben} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-768,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-hip-k20x-optimized-w.csv};
+            \addlegendentry{Schreiben} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{zcopy: K20x-Bandbreite für 768er-Blöcke ($n = 88080384$, HIP)}
+\end{figure}
+
+\subsection{SYCL-zcopy}
+\label{anhang:sycl:zcopyfig}
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {K20x -- zcopy -- Lesen + Schreiben -- $2^x$ -- SYCL},
+            xlabel = {Groups pro Multiprozessor},
+            ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
+            xmode = log,
+            log basis x = 2,
+            xmin = 1, xmax = 8192,
+            ymin = 40, ymax = 190,
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = south east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            width = 0.75\textwidth,
+            scale only axis,
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = blocks_per_sm, y = throughput-64,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-sycl-k20x-generic-rw.csv};
+            \addlegendentry{$\text{Group-Größe} = 64$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-128,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-sycl-k20x-generic-rw.csv};
+            \addlegendentry{$\text{Group-Größe} = 128$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-256,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-sycl-k20x-generic-rw.csv};
+            \addlegendentry{$\text{Group-Größe} = 256$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-512,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-sycl-k20x-generic-rw.csv};
+            \addlegendentry{$\text{Group-Größe} = 512$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-1024,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-sycl-k20x-generic-rw.csv};
+            \addlegendentry{$\text{Group-Größe} = 1024$} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{zcopy: K20x-Bandbreite für Zweierpotenzen ($n = 117440512$, Lesen und Schreiben, SYCL)}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {K20x -- zcopy -- Schreiben -- $2^x$ -- SYCL},
+            xlabel = {Groups pro Multiprozessor},
+            ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
+            xmode = log,
+            log basis x = 2,
+            xmin = 1, xmax = 8192,
+            ymin = 70, ymax = 190,
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = south east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            width = 0.75\textwidth,
+            scale only axis,
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = blocks_per_sm, y = throughput-64,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-sycl-k20x-generic-w.csv};
+            \addlegendentry{$\text{Group-Größe} = 64$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-128,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-sycl-k20x-generic-w.csv};
+            \addlegendentry{$\text{Group-Größe} = 128$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-256,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-sycl-k20x-generic-w.csv};
+            \addlegendentry{$\text{Group-Größe} = 256$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-512,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-sycl-k20x-generic-w.csv};
+            \addlegendentry{$\text{Group-Größe} = 512$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-1024,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-sycl-k20x-generic-w.csv};
+            \addlegendentry{$\text{Group-Größe} = 1024$} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{zcopy: K20x-Bandbreite für Zweierpotenzen ($n = 117440512$, Schreiben, SYCL)}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {K20x -- zcopy -- Lesen + Schreiben -- $192 \cdot 2^x$ -- SYCL},
+            xlabel = {Groups pro Multiprozessor},
+            ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
+            xmode = log,
+            log basis x = 2,
+            xmin = 1, xmax = 8192,
+            ymin = 40, ymax = 190,
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = south east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            width = 0.75\textwidth,
+            scale only axis,
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = blocks_per_sm, y = throughput-192,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-sycl-k20x-optimized-rw.csv};
+            \addlegendentry{$\text{Group-Größe} = 192$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-384,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-sycl-k20x-optimized-rw.csv};
+            \addlegendentry{$\text{Group-Größe} = 384$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-768,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-sycl-k20x-optimized-rw.csv};
+            \addlegendentry{$\text{Group-Größe} = 768$} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{zcopy: K20x-Bandbreite für 192er-Vielfache ($n = 88080384$, Lesen und Schreiben, SYCL)}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {K20x -- zcopy -- Schreiben -- $192 \cdot 2^x$ -- SYCL},
+            xlabel = {Groups pro Multiprozessor},
+            ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
+            xmode = log,
+            log basis x = 2,
+            xmin = 1, xmax = 8192,
+            ymin = 70, ymax = 190,
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = south east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            width = 0.75\textwidth,
+            scale only axis,
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = blocks_per_sm, y = throughput-192,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-sycl-k20x-optimized-w.csv};
+            \addlegendentry{$\text{Group-Größe} = 192$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-384,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-sycl-k20x-optimized-w.csv};
+            \addlegendentry{$\text{Group-Größe} = 384$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-768,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-sycl-k20x-optimized-w.csv};
+            \addlegendentry{$\text{Group-Größe} = 768$} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{zcopy: K20x-Bandbreite für 192er-Vielfache ($n = 88080384$, Schreiben, SYCL)}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {K20x -- zcopy -- Schreiben -- SYCL},
+            xlabel = {Groups pro Multiprozessor},
+            ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
+            xmode = log,
+            log basis x = 2,
+            xmin = 1, xmax = 8192,
+            ymin = 175, ymax = 188,
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = south east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            width = 0.75\textwidth,
+            scale only axis,
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = blocks_per_sm, y = throughput-768,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-sycl-k20x-optimized-w.csv};
+            \addlegendentry{$\text{Group-Größe} = 768$} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-1024,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-sycl-k20x-generic-w.csv};
+            \addlegendentry{$\text{Group-Größe} = 1024$} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{zcopy: K20x-Bandbreite für Zweierpotenzen ($n = 117440512$) und 192er-Vielfache ($n = 88080384$, Schreiben,
+             SYCL)}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {K20x -- zcopy -- SYCL},
+            xlabel = {Groups pro Multiprozessor},
+            ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
+            xmode = log,
+            log basis x = 2,
+            xmin = 1, xmax = 8192,
+            % ymin = 175, ymax = 188,
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = south east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            width = 0.75\textwidth,
+            scale only axis,
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = blocks_per_sm, y = throughput-768,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-sycl-k20x-optimized-rw.csv};
+            \addlegendentry{Lesen + Schreiben} 
+
+            \addplot table [x = blocks_per_sm, y = throughput-768,
+                            col sep = semicolon]
+                           {data/zcopy-nvidia-sycl-k20x-optimized-w.csv};
+            \addlegendentry{Schreiben} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{zcopy: K20x-Bandbreite für 768er-Groups ($n = 88080384$, SYCL)}
+\end{figure}
+
+\subsection{HIP-Reduction (AMD)}
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {Vega 64 -- Reduction -- HIP},
+            xlabel = {Blöcke pro Multiprozessor},
+            ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
+            xmode = log,
+            log basis x = 2,
+            xmin = 2, xmax = 1024,
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = south east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            width = 0.75\textwidth,
+            scale only axis,
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = tiles, y = dim64,
+                            col sep = semicolon]
+                           {data/reduce-amd-hip-vega64.csv};
+            \addlegendentry{Tile-Größe = 64} 
+
+            \addplot table [x = tiles, y = dim128,
+                            col sep = semicolon]
+                           {data/reduce-amd-hip-vega64.csv};
+            \addlegendentry{Tile-Größe = 128} 
+
+            \addplot table [x = tiles, y = dim256,
+                            col sep = semicolon]
+                           {data/reduce-amd-hip-vega64.csv};
+            \addlegendentry{Tile-Größe = 256} 
+
+            \addplot table [x = tiles, y = dim512,
+                            col sep = semicolon]
+                           {data/reduce-amd-hip-vega64.csv};
+            \addlegendentry{Tile-Größe = 512} 
+
+            \addplot table [x = tiles, y = dim1024,
+                            col sep = semicolon]
+                           {data/reduce-amd-hip-vega64.csv};
+            \addlegendentry{Tile-Größe = 1024} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{Reduction: Bandbreite der Vega 64 (HIP)}
+    \label{anhang:amd:reduction:hip}
+\end{figure}
+
+\subsection{HIP-Reduction (NVIDIA)}
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {K20x -- Reduction -- HIP},
+            xlabel = {Blöcke pro Multiprozessor},
+            ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
+            xmode = log,
+            log basis x = 2,
+            xmin = 2, xmax = 1024,
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = south east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            width = 0.75\textwidth,
+            scale only axis,
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = blocks, y = dim64,
+                            col sep = semicolon]
+                           {data/reduce-nvidia-hip-k20x.csv};
+            \addlegendentry{Tile-Größe = 64} 
+
+            \addplot table [x = blocks, y = dim128,
+                            col sep = semicolon]
+                           {data/reduce-nvidia-hip-k20x.csv};
+            \addlegendentry{Tile-Größe = 128} 
+
+            \addplot table [x = blocks, y = dim256,
+                            col sep = semicolon]
+                           {data/reduce-nvidia-hip-k20x.csv};
+            \addlegendentry{Tile-Größe = 256} 
+
+            \addplot table [x = blocks, y = dim512,
+                            col sep = semicolon]
+                           {data/reduce-nvidia-hip-k20x.csv};
+            \addlegendentry{Tile-Größe = 512} 
+
+            \addplot table [x = blocks, y = dim1024,
+                            col sep = semicolon]
+                           {data/reduce-nvidia-hip-k20x.csv};
+            \addlegendentry{Tile-Größe = 1024} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{Reduction: Bandbreite K20x (HIP)}
+    \label{anhang:nvidia:reduction:hip}
+\end{figure}
+
+\subsection{SYCL-Reduction}
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {K20x -- Reduction -- SYCL},
+            xlabel = {Gruppen pro Multiprozessor},
+            ylabel = {Bandbreite [\si{\gibi\byte\per\second}]},
+            xmode = log,
+            log basis x = 2,
+            xmin = 2, xmax = 4096,
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = south east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            width = 0.75\textwidth,
+            scale only axis,
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = blocks, y = dim64,
+                            col sep = semicolon]
+                           {data/reduce-nvidia-sycl-k20x.csv};
+            \addlegendentry{Tile-Größe = 64} 
+
+            \addplot table [x = blocks, y = dim128,
+                            col sep = semicolon]
+                           {data/reduce-nvidia-sycl-k20x.csv};
+            \addlegendentry{Tile-Größe = 128} 
+
+            \addplot table [x = blocks, y = dim256,
+                            col sep = semicolon]
+                           {data/reduce-nvidia-sycl-k20x.csv};
+            \addlegendentry{Tile-Größe = 256} 
+
+            \addplot table [x = blocks, y = dim512,
+                            col sep = semicolon]
+                           {data/reduce-nvidia-sycl-k20x.csv};
+            \addlegendentry{Tile-Größe = 512} 
+
+            \addplot table [x = blocks, y = dim1024,
+                            col sep = semicolon]
+                           {data/reduce-nvidia-sycl-k20x.csv};
+            \addlegendentry{Tile-Größe = 1024} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{Reduction: Bandbreite K20x (SYCL)}
+    \label{anhang:nvidia:reduction:sycl}
+\end{figure}
+
+\subsection{HIP-N-Body (AMD)}
+
+\begin{figure} [H]
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {Vega 64 -- N-Body -- Ausrollen -- HIP},
+            xlabel = {Ausrollfaktor},
+            ylabel = {GFLOPS},
+            xmode = log,
+            log basis x = 2,
+            xmin = 1, xmax = 512,
+            xtick = {1,2,4,8,16,32,64,128,256,512},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = outer north east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = count, y = gflops-hip, col sep = semicolon]
+                           {data/nbody-amd-unroll-524288.csv};
+            \addlegendentry{$n = 524.288$} 
+
+            \addplot table [x = count, y = gflops-hip, col sep = semicolon]
+                           {data/nbody-amd-unroll-65536.csv};
+            \addlegendentry{$n = 65.536$} 
+
+            \addplot table [x = count, y = gflops-hip, col sep = semicolon]
+                           {data/nbody-amd-unroll-8192.csv};
+            \addlegendentry{$n = 8.192$} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{Performanzgewinn der Vega 64 durch das Ausrollen der Schleife (HIP)}
+    \label{anhang:amd:nbody:unroll-hip}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {Vega 64 -- N-Body -- Kachelgrößen -- HIP},
+            xlabel = {Kachelgröße},
+            ylabel = {GFLOPS},
+            xmode = log,
+            log basis x = 2,
+            xtick = {64,128,256,512,1024},
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = outer north east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = tilesize, y = gflops-hip, col sep = semicolon]
+                           {data/nbody-amd-tilesize-524288.csv};
+            \addlegendentry{$n = 524.288$} 
+
+            \addplot table [x = tilesize, y = gflops-hip, col sep = semicolon]
+                           {data/nbody-amd-tilesize-65536.csv};
+            \addlegendentry{$n = 65.536$} 
+
+            \addplot table [x = tilesize, y = gflops-hip, col sep = semicolon]
+                           {data/nbody-amd-tilesize-8192.csv};
+            \addlegendentry{$n = 8.192$} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{N-Body: Performanz der Vega 64 bei verschiedenen Kachelgrößen (HIP)}
+    \label{anhang:amd:nbody:tilesize-hip}
+\end{figure}
+
+\subsection{HIP-N-Body (NVIDIA)}
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {K20x -- N-Body -- Ausrollen -- HIP},
+            xlabel = {Ausrollfaktor},
+            ylabel = {GFLOPS},
+            xmode = log,
+            log basis x = 2,
+            xmin = 1, xmax = 1024,
+            xtick = {1,2,4,8,16,32,64,128,256,512,1024},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = outer north east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = count, y = HIP, col sep = semicolon]
+                           {data/nbody-nvidia-unroll-524288.csv};
+            \addlegendentry{$n = 524.288$} 
+
+            \addplot table [x = count, y = HIP, col sep = semicolon]
+                           {data/nbody-nvidia-unroll-65536.csv};
+            \addlegendentry{$n = 65.536$} 
+
+            \addplot table [x = count, y = HIP, col sep = semicolon]
+                           {data/nbody-nvidia-unroll-8192.csv};
+            \addlegendentry{$n = 8.192$} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{N-Body: K20x-Performanzgewinn durch das Ausrollen der Schleife (HIP)}
+    \label{anhang:nvidia:nbody:unroll:hip}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {K20x -- N-Body -- Kachelgrößen -- HIP},
+            xlabel = {Kachelgröße},
+            ylabel = {GFLOPS},
+            xmode = log,
+            log basis x = 2,
+            xtick = {32,64,128,256,512,1024},
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = outer north east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = tilesize, y = HIP, col sep = semicolon]
+                           {data/nbody-nvidia-tilesize-524288.csv};
+            \addlegendentry{$n = 524.288$} 
+
+            \addplot table [x = tilesize, y = HIP, col sep = semicolon]
+                           {data/nbody-nvidia-tilesize-65536.csv};
+            \addlegendentry{$n = 65.536$} 
+
+            \addplot table [x = tilesize, y = HIP, col sep = semicolon]
+                           {data/nbody-nvidia-tilesize-8192.csv};
+            \addlegendentry{$n = 8.192$} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{N-Body: K20x-Performanz bei verschiedenen Kachelgrößen (HIP)}
+    \label{anhang:nvidia:nbody:tilesize:hip}
+\end{figure}
+
+\subsection{SYCL-N-Body}
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            title = {K20x -- N-Body -- Kachelgrößen -- SYCL},
+            xlabel = {Kachelgröße},
+            ylabel = {GFLOPS},
+            xmode = log,
+            log basis x = 2,
+            xtick = {32,64,128,256,512,1024},
+            xticklabel = {\xinttheiexpr2^\tick\relax},
+            log ticks with fixed point,
+            ymajorgrids = true,
+            xmajorgrids = true,
+            grid style = dashed,
+            legend cell align = left,
+            legend pos = outer north east,
+            no markers,
+            every axis plot/.append style = {very thick},
+            cycle list name = exotic,
+            /pgf/number format/.cd, use comma
+        ]
+            \addplot table [x = tilesize, y = SYCL, col sep = semicolon]
+                           {data/nbody-nvidia-tilesize-524288.csv};
+            \addlegendentry{$n = 524.288$} 
+
+            \addplot table [x = tilesize, y = SYCL, col sep = semicolon]
+                           {data/nbody-nvidia-tilesize-65536.csv};
+            \addlegendentry{$n = 65.536$} 
+
+            \addplot table [x = tilesize, y = SYCL, col sep = semicolon]
+                           {data/nbody-nvidia-tilesize-8192.csv};
+            \addlegendentry{$n = 8.192$} 
+        \end{axis}
+    \end{tikzpicture}
+    \caption{N-Body: K20x-Performanz bei verschiedenen Kachelgrößen (SYCL)}
+    \label{anhang:nvidia:nbody:tilesize:sycl}
+\end{figure}

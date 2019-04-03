@@ -1,0 +1,92 @@
+\documentclass[utf8,german,fpg,lot,lof,lol]{zihpub}
+
+\usepackage{algorithmicx}
+\usepackage{algpseudocode}
+\usepackage{caption}
+\usepackage{chngcntr} % Bilder pro section zählen
+\usepackage{datetime}
+\usepackage{etoolbox}
+\usepackage{float}
+\usepackage[acronyms,nonumberlist,nopostdot,toc,savewrites,xindy]{glossaries}
+\usepackage[section,newfloat]{minted}
+\usepackage[super]{nth}
+\usepackage{pgfplots}
+\usepackage[binary-units]{siunitx}
+\usepackage{subcaption}
+\usepackage{tabularx}
+\usepackage{textcomp}
+\usepackage{tcolorbox}
+\usepackage{tikz}
+\usepackage{tkz-berge}
+\usepackage{xintexpr} % weil PGFPlots zu dämlich für 1024 ist
+
+% Bilder pro section
+\counterwithin{figure}{section}
+\counterwithin{table}{section}
+
+\usetikzlibrary{arrows}
+\usetikzlibrary{arrows.meta}
+
+\pgfplotsset{
+    /pgfplots/peak/.style = {
+        legend image code/.code = {
+            \draw[solid,thick,red](-0.05cm,0cm) -- (0.3cm, 0cm);
+        }
+    }
+}
+
+\usepackage{CJKutf8}
+\AtBeginDvi{\input{zhwinfonts}}
+
+\input{glossar}
+
+\newenvironment{code}{\captionsetup{type=listing}}{}
+\SetupFloatingEnvironment{listing}{name=Quelltext}
+
+\BeforeBeginEnvironment{minted}{\begin{tcolorbox}}
+\AfterEndEnvironment{minted}{\end{tcolorbox}}
+
+\newcommand{\lstfont}[1]{\color{#1}\small\ttfamily}
+
+\definecolor{keyword-green}{RGB}{0, 128, 0}
+
+\author{Jan Stephan}
+\title{Innovative Spracherweiterungen für Beschleunigerkarten am Beispiel von
+       SYCL, HC, HIP und CUDA: Untersuchung zu Nutzbarkeit und Performance}
+\matno{3755136}
+\betreuer{\hspace{0.15mm}Dr.-Ing.\ Bernd Trenkler\\
+          \qquad \qquad Matthias Werner, M.Sc.}
+\date{21.\ Februar 2019}
+
+\bibfiles{bibliography.bib}
+\def\UrlBreaks{\do\/\do-}
+
+% Germanisiere LaTeX
+\deftranslation[to=German]{Acronyms}{Abkürzungsverzeichnis}
+\deftranslation[to=German]{Glossary}{Glossar}
+\renewcommand*{\listlistingname}{Quelltextverzeichnis}
+
+\sisetup{locale = DE}
+\sisetup{group-separator = {.}}
+\sisetup{group-four-digits}
+
+\fancyhf{}
+\fancyhead[L]{Jan Stephan -- Innovative Spracherweiterungen}
+
+\begin{document}
+
+\glsaddall
+
+\printglossary
+\printglossary[type=\acronymtype]
+
+\include{einleitung}
+\include{vergleich}
+\include{methoden}
+\include{nvidia}
+\include{amd}
+\include{fazit}
+
+\include{anhang}
+
+\end{document}

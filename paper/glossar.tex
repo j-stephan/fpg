@@ -1,0 +1,66 @@
+\makeglossaries
+
+\newacronym{api}{API}{\textit{application programming interface}}
+\newacronym{apu}{APU}{\textit{accelerated processing unit}}
+
+\newacronym{cpu}{CPU}{\textit{central processing unit}}
+
+\newacronym{dsp}{DSP}{\textit{digital signal processor}}
+
+\newacronym{flops}{FLOPS}{\textit{floating-point operations per second}}
+\newacronym{fma}{FMA}{\textit{fused multiply-add}}
+\newacronym{fpga}{FPGA}{\textit{field programmable gate array}}
+
+\newacronym{gpgpu}{GPGPU}{\textit{general purpose computation on graphics processing unit}}
+\newacronym{gpu}{GPU}{\textit{graphics processing unit}}
+
+\newacronym{hc}{HC}{\textit{Heterogeneous Compute API}}
+\newacronym{hcc}{HCC}{\textit{Heterogeneous Compute Compiler}}
+\newacronym{hip}{HIP}{\textit{Heterogeneous-Computing Interface for Portability}}
+\newacronym{hpc}{HPC}{\textit{high-performance computing}}
+\newacronym{hsa}{HSA}{\textit{Heterogeneous System Architecture}}
+
+\newacronym{opencl}{OpenCL}{\textit{Open Compute Language}}
+\newacronym{openmp}{OpenMP}{\textit{Open Multi-Processing}}
+
+\newacronym{rocm}{ROCm}{\textit{Radeon Open Compute Platform}}
+
+\newacronym{simd}{SIMD}{\textit{single-instruction, multiple data}}
+\newacronym{simt}{SIMT}{\textit{single-instruction, multiple thread}}
+
+\newglossaryentry{kernel}{name = Kernel,
+                          description = {Programm, das auf einem Beschleuniger,
+                                         wie etwa einer GPU, ausgeführt wird.},
+                          plural = Kernel}
+\newglossaryentry{host}{name = Host,
+                        description = {Gerät, das einen Kernel auf dem Device
+                                       ausführen lässt. Üblicherweise das Gerät,
+                                       auf dem das Betriebssystem läuft, etwa
+                                       ein PC oder ein Knoten auf einem
+                                       Superrechner.},
+                        plural = Hosts}
+\newglossaryentry{device}{name = Device,
+                          description = {Ein von der CPU zu unterscheidendes
+                                         Gerät für Berechnungen (Beschleuniger).
+                                         Im Kontext dieser Arbeit stets eine
+                                         GPU.},
+                          plural = Devices}
+\newglossaryentry{singlesource}{name = {single-source compilation},
+                                description = {Die Quelltexte für Host und
+                                               Device können sich in derselben
+                                               Datei befinden und werden
+                                               gleichzeitig vom Compiler
+                                               verarbeitet.}}
+\newglossaryentry{splitsource}{name = {split-source compilation},
+                               description = {Die Quelltexte für Host und
+                                              Device werden getrennt
+                                              verarbeitet. Der Host-Quelltext
+                                              wird von einem normalen Compiler
+                                              übersetzt, der Device-Quelltext
+                                              von einem weiteren Compiler und
+                                              unter Umständen erst zur Laufzeit
+                                              des Programms.}}
+\newglossaryentry{flop}{name = {FLOP},
+                        description = {Fließkommaoperationen (engl.
+                                        \textit{floating point operations}).},
+                        plural = FLOPs}
